@@ -1,0 +1,1831 @@
+{
+  "name": "WF00s - Static Source Ingestion (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "97628589-d160-4d41-bb75-8e74d732776a",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -4752,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "filterByFormula": "AND({Status}=\"Active\", {Links}!=\"\", NOT({Static_Processed}))",
+        "options": {}
+      },
+      "id": "f7f67448-8095-453d-b28c-8d8d4d0b8bf6",
+      "name": "1. Get Pending Links",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -3184,
+        -480
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "199459e3-b4c1-4bfa-b207-d79a31829bbe",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -3184,
+        -672
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.item.json;\nconst cfg = r.cfg || {};\nconst url = (r.Links || '').trim();\nconst rid = r.id;\nlet platform = 'generic';\nconst u = url.toLowerCase();\nif (u.includes('linkedin.com')) platform = 'linkedin';\nelse if (u.includes('tiktok.com')) platform = 'tiktok';\nelse if (u.includes('instagram.com')) platform = 'instagram';\nelse if (u.includes('youtube.com') || u.includes('youtu.be')) platform = 'youtube';\nelse if (u.match(/\\.pdf($|\\?)/)) platform = 'pdf';\nreturn [{ json: { record_id: rid, source_url: url, platform, source_name: r['Source Name'] || '', cfg } }];"
+      },
+      "id": "e91c8f55-6667-4136-8297-727873c516f3",
+      "name": "3. Detect Platform",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2512,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.manus.ai/v2/task.create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"content\": [{ \"type\": \"text\", \"text\": {{ JSON.stringify(\"Fetch ALL content from this URL: full post text, every image, and any attached PDF or document. Then enrich it. Return ONLY valid minified JSON, no prose, no markdown, no code fences, using EXACTLY this schema: {\\\"topic\\\":\\\"concise one-line summary\\\",\\\"text\\\":\\\"full post text\\\",\\\"image_urls\\\":[\\\"direct image url\\\"],\\\"pdf_urls\\\":[\\\"direct pdf url\\\"],\\\"category\\\":\\\"one of: News, Education, Product, Tech\\\",\\\"instagram_caption\\\":\\\"engaging Instagram caption with relevant hashtags\\\",\\\"linkedin_caption\\\":\\\"professional LinkedIn caption\\\",\\\"static_notes\\\":\\\"short content brief describing the key message and suggested visual angle\\\",\\\"publish_date\\\":\\\"the original date the post was published, in YYYY-MM-DD format; if only a relative time like 7 hours ago or 2 days ago is shown, calculate the actual calendar date from today and return YYYY-MM-DD; if unknown return empty string\\\"} . URL: \" + $json.source_url) }} }]\n  },\n  \"title\": {{ JSON.stringify('Ingest: ' + ($json.source_name || $json.source_url)) }},\n  \"project_id\": {{ JSON.stringify($json.cfg.manus_project_id) }},\n  \"hide_in_task_list\": false,\n  \"agent_profile\": \"manus-1.6\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "10dd96dc-31b0-41cc-b753-bbd095df3e01",
+      "name": "4a. Manus Create Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -2288,
+        -480
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 20
+      },
+      "id": "445036e0-f348-48bd-b229-25a70dacfd69",
+      "name": "4b. Wait 20s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1840,
+        -480
+      ],
+      "webhookId": "fa674f67-1741-429c-a54d-2be67ffc0303"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.manus.ai/v2/task.listMessages?order=asc&limit=50&task_id=\" + ($('4a. Manus Create Task').item.json.task_id || $('4a. Manus Create Task').item.json.id) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "fb1709d0-f608-4025-b39a-9770b5dd2c18",
+      "name": "4c. Manus Poll",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1392,
+        -528
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "962ad3ae-d331-4b8e-ae32-76169bb4a1ef",
+              "leftValue": "={{ (() => { const b = $json; const arr = Array.isArray(b) ? b : (b.data || b.messages || b.events || []); if (!Array.isArray(arr)) return false; const looksJson = (t) => { let c = String(t || '').replace(/```json/gi, '').replace(/```/g, '').trim(); const s = c.indexOf('{'); const e = c.lastIndexOf('}'); if (s < 0 || e <= s) return false; try { const o = JSON.parse(c.slice(s, e + 1)); return !!o && typeof o === 'object' && (('topic' in o) || ('text' in o)); } catch (err) { return false; } }; return arr.some(m => { const am = m && m.assistant_message; if (!am) return false; if (looksJson(am.content)) return true; return (am.attachments || []).some(a => a && a.url && (/\\.json/i.test(a.url) || /json/i.test(a.content_type || ''))); }); })() }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cac64a38-495d-49d3-a46c-e91d4af46510",
+      "name": "4d. Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1168,
+        -528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('3. Detect Platform').item.json;\nconst b = $input.first().json;\nconst arr = Array.isArray(b) ? b : (b.data || b.messages || b.events || []);\n\nconst extractJson = (t) => {\n  let c = String(t || '').replace(/```json/gi, '').replace(/```/g, '').trim();\n  const s = c.indexOf('{');\n  const e = c.lastIndexOf('}');\n  if (s < 0 || e <= s) return null;\n  const slice = c.slice(s, e + 1);\n  try {\n    const o = JSON.parse(slice);\n    if (o && typeof o === 'object' && (('topic' in o) || ('text' in o))) return slice;\n  } catch (err) { return null; }\n  return null;\n};\n\nlet inlineText = '';\nlet fileUrl = '';\n\nif (Array.isArray(arr)) {\n  for (const m of arr) {\n    const am = m && m.assistant_message;\n    if (!am) continue;\n    const payload = extractJson(am.content);\n    if (payload) inlineText = payload;\n    for (const a of (am.attachments || [])) {\n      if (a && a.url && (/\\.json/i.test(a.url) || /json/i.test(a.content_type || ''))) fileUrl = a.url;\n    }\n  }\n}\n\nconst taskId = $('4a. Manus Create Task').item.json.task_id || $('4a. Manus Create Task').item.json.id || '';\n\nreturn [{ json: { ...ctx, manus_file_url: fileUrl, manus_inline_text: inlineText, manus_task_url: taskId ? ('https://manus.im/app/' + taskId) : '' } }];"
+      },
+      "id": "bfaf6136-5561-45f2-b935-ec02288dd610",
+      "name": "5. Manus Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.manus_file_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "026ec50c-2487-4060-9508-4d1bcb10aedd",
+      "name": "5b. Fetch Output File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -496,
+        -624
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('5. Manus Parse').item.json;\nlet d = {};\nlet rawSource = '';\nif (ctx.manus_file_url) {\n  let body = $input.first().json;\n  if (body && typeof body.data === 'string') rawSource = body.data;\n  else if (typeof body === 'string') rawSource = body;\n  else if (body && typeof body === 'object') { rawSource = JSON.stringify(body); }\n} else if (ctx.manus_inline_text) {\n  rawSource = ctx.manus_inline_text;\n}\nlet raw = String(rawSource).replace(/```json/gi,'').replace(/```/g,'').trim();\nif (raw && raw[0] !== '{') { const s = raw.indexOf('{'); const e = raw.lastIndexOf('}'); if (s>=0 && e>s) raw = raw.slice(s,e+1); }\ntry { d = JSON.parse(raw); } catch(e) { d = { text: ctx.manus_inline_text || '' }; }\nconst media = [];\n(d.image_urls || []).forEach(x => { if (x) media.push(x); });\n(d.pdf_urls || []).forEach(x => { if (x) media.push(x); });\nconst text = d.text || '';\nconst topic = (d.topic || text.split('\\n')[0] || 'Source Post').slice(0, 120);\nconst valid = ['News','Education','Product','Tech'];\nconst synonyms = { news:'News', breaking:'News', education:'Education', educational:'Education', learning:'Education', tutorial:'Education', guide:'Education', howto:'Education', product:'Product', launch:'Product', feature:'Product', release:'Product', tech:'Tech', technology:'Tech', technical:'Tech', ai:'Tech', software:'Tech', engineering:'Tech' };\nlet category = '';\nconst rawCat = (d.category || '').toString().trim();\nif (rawCat) {\n  const exact = valid.find(v => v.toLowerCase() === rawCat.toLowerCase());\n  if (exact) { category = exact; }\n  else {\n    const key = rawCat.toLowerCase().replace(/[^a-z]/g,'');\n    if (synonyms[key]) category = synonyms[key];\n    else { const partial = valid.find(v => rawCat.toLowerCase().includes(v.toLowerCase()) || v.toLowerCase().includes(rawCat.toLowerCase())); if (partial) category = partial; }\n  }\n}\nif (!category) category = 'Tech';\nlet publishDate = (d.publish_date || '').trim();\nif (!/^\\d{4}-\\d{2}-\\d{2}$/.test(publishDate)) publishDate = '';\n\nconst tz = (ctx.cfg && ctx.cfg.timezone) || 'Asia/Manila';\nconst genDate = $now.setZone(tz).toFormat('yyyy-MM-dd');\nconst shortId = ctx.record_id ? String(ctx.record_id).substring(0,7) : 'norec';\nlet slug = topic.toLowerCase().replace(/[^a-z0-9\\s-]/g,'').replace(/\\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');\nif (slug.length > 40) { slug = slug.substring(0,40); const cut = slug.lastIndexOf('-'); if (cut > 15) slug = slug.substring(0,cut); }\nslug = slug.replace(/^-|-$/g,'') || 'source-post';\nconst subfolderName = genDate + '_' + slug + '_' + shortId;\n\nreturn [{ json: { record_id: ctx.record_id, source_url: ctx.source_url, platform: ctx.platform, source_name: ctx.source_name, cfg: ctx.cfg, topic, scraped_text: text, media_urls: media, category, instagram_caption: d.instagram_caption || '', linkedin_caption: d.linkedin_caption || '', static_notes: d.static_notes || '', publish_date: publishDate, subfolder_name: subfolderName, gen_date: genDate, short_id: shortId } }];"
+      },
+      "id": "4bf55f4d-6012-462f-a8ed-b1f859b2277b",
+      "name": "5c. Parse Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.subfolder_name, mimeType: \"application/vnd.google-apps.folder\", parents: [$json.cfg.drive_folder_id] }) }}",
+        "options": {}
+      },
+      "id": "0ca14575-3b92-4bb1-9d98-8e32efc2ae3a",
+      "name": "8. Create Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -48,
+        -544
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderId = $input.first().json.id;\nconst ctx = $('5c. Parse Output').item.json;\nconst subfolderUrl = 'https://drive.google.com/drive/folders/' + folderId;\nconst out = [];\nconst media = ctx.media_urls || [];\nif (media.length === 0) {\n  out.push({ json: { ...ctx, folder_id: folderId, subfolder_url: subfolderUrl, media_url: null, media_index: 0, total_media: 0 } });\n} else {\n  media.forEach((m, i) => out.push({ json: { ...ctx, folder_id: folderId, subfolder_url: subfolderUrl, media_url: m, media_index: i, total_media: media.length } }));\n}\nreturn out;"
+      },
+      "id": "3a610be7-a60b-4bd2-b9d7-95ee5658abc2",
+      "name": "9. Prep Media List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.media_url }}",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "86bdcefe-dc51-4e78-8d99-2a50af9a8166",
+      "name": "10b. Has Media?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.media_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "0791fc04-9c5b-46c7-82bf-bc74b6e735ba",
+      "name": "11. Download Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        624,
+        -624
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('9. Prep Media List').item.json.subfolder_name + \"_\" + $('9. Prep Media List').item.json.media_index + \"_\" + ($('9. Prep Media List').item.json.media_url.split(\"/\").pop().split(\"?\")[0] || \"file\") }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('3. Detect Platform').item.json.cfg.drive_shared_drive_id }}"
+        },
+        "folderId": "={{ $('9. Prep Media List').item.json.folder_id }}",
+        "options": {}
+      },
+      "id": "24da4686-ec8f-474d-88e2-dcaa7a50101f",
+      "name": "12. Upload to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        848,
+        -624
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $input.first().json;\nconst loopItem = $('9. Prep Media List').item.json;\nlet link = '';\nif (loopItem.media_url) {\n  link = src.webViewLink || (src.id ? 'https://drive.google.com/file/d/' + src.id + '/view' : '');\n}\nreturn [{ json: { ...loopItem, drive_link: link } }];"
+      },
+      "id": "39174c89-4d04-448e-bfb1-4852df35ab97",
+      "name": "13. Collect Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $('13. Collect Link').all().map(i => i.json);\nconst ctx = $('9. Prep Media List').first().json;\nconst links = all.map(x => x.drive_link).filter(Boolean);\nreturn [{ json: {\n  record_id: ctx.record_id,\n  cfg: ctx.cfg,\n  topic: ctx.topic,\n  source_url: ctx.source_url,\n  scraped_text: ctx.scraped_text || '',\n  subfolder_url: ctx.subfolder_url,\n  media_urls: links.join('\\n'),\n  category: ctx.category || 'Tech',\n  instagram_caption: ctx.instagram_caption || '',\n  linkedin_caption: ctx.linkedin_caption || '',\n  static_notes: ctx.static_notes || '',\n  publish_date: ctx.publish_date || ''\n} }];"
+      },
+      "id": "4edbc59b-622a-4647-aa46-298acf1cbedd",
+      "name": "14. Build Engine Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        -544
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Category": "={{ $json.category }}",
+            "Instagram_Caption": "={{ $json.instagram_caption }}",
+            "LinkedIn_Caption": "={{ $json.linkedin_caption }}",
+            "Publish_Date": "={{ $json.publish_date }}",
+            "Scraped_Text": "={{ $json.scraped_text }}",
+            "Source URL": "={{ $json.source_url }}",
+            "Source_Media_URLs": "={{ $json.media_urls }}",
+            "Source_Subfolder_URL": "={{ $json.subfolder_url }}",
+            "Static_Notes": "={{ $json.static_notes }}",
+            "Status": "Idea",
+            "Topic": "={{ $json.topic }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Ready for Image Generation",
+                  "value": "Ready for Image Generation"
+                },
+                {
+                  "name": "Ready for Blog Post",
+                  "value": "Ready for Blog Post"
+                },
+                {
+                  "name": "Ready for Ebook",
+                  "value": "Ready for Ebook"
+                },
+                {
+                  "name": "Image Processing",
+                  "value": "Image Processing"
+                },
+                {
+                  "name": "Blog Processing",
+                  "value": "Blog Processing"
+                },
+                {
+                  "name": "Ebook Processing",
+                  "value": "Ebook Processing"
+                },
+                {
+                  "name": "Blog Ready",
+                  "value": "Blog Ready"
+                },
+                {
+                  "name": "Image Ready",
+                  "value": "Image Ready"
+                },
+                {
+                  "name": "Ebook Ready",
+                  "value": "Ebook Ready"
+                },
+                {
+                  "name": "Blog Posted",
+                  "value": "Blog Posted"
+                },
+                {
+                  "name": "Idea",
+                  "value": "Idea"
+                },
+                {
+                  "name": "Draft",
+                  "value": "Draft"
+                },
+                {
+                  "name": "Error - Insufficient Credits",
+                  "value": "Error - Insufficient Credits"
+                },
+                {
+                  "name": "Error - Fal.ai No Credit",
+                  "value": "Error - Fal.ai No Credit"
+                },
+                {
+                  "name": "Error - Image Generation Failed",
+                  "value": "Error - Image Generation Failed"
+                },
+                {
+                  "name": "Error - Blog Generation Failed",
+                  "value": "Error - Blog Generation Failed"
+                },
+                {
+                  "name": "Error - Blog API Failed",
+                  "value": "Error - Blog API Failed"
+                },
+                {
+                  "name": "Error - Ebook Generation Failed",
+                  "value": "Error - Ebook Generation Failed"
+                },
+                {
+                  "name": "Error - Missing Required Fields",
+                  "value": "Error - Missing Required Fields"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "News",
+                  "value": "News"
+                },
+                {
+                  "name": "Education",
+                  "value": "Education"
+                },
+                {
+                  "name": "Product",
+                  "value": "Product"
+                },
+                {
+                  "name": "Tech",
+                  "value": "Tech"
+                },
+                {
+                  "name": "Business",
+                  "value": "Business"
+                },
+                {
+                  "name": "Entertainment",
+                  "value": "Entertainment"
+                },
+                {
+                  "name": "Health",
+                  "value": "Health"
+                },
+                {
+                  "name": "Lifestyle",
+                  "value": "Lifestyle"
+                },
+                {
+                  "name": "Other",
+                  "value": "Other"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Ratio",
+              "displayName": "Ratio",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Landscape",
+                  "value": "Landscape"
+                },
+                {
+                  "name": "Portrait",
+                  "value": "Portrait"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Output_Format",
+              "displayName": "Output_Format",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Image",
+                  "value": "Image"
+                },
+                {
+                  "name": "Carousel",
+                  "value": "Carousel"
+                },
+                {
+                  "name": "Blog",
+                  "value": "Blog"
+                },
+                {
+                  "name": "Ebook",
+                  "value": "Ebook"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Render_Style",
+              "displayName": "Render_Style",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "photorealistic-cinematic",
+                  "value": "photorealistic-cinematic"
+                },
+                {
+                  "name": "isometric-3d-illustration",
+                  "value": "isometric-3d-illustration"
+                },
+                {
+                  "name": "flat-2d-vector",
+                  "value": "flat-2d-vector"
+                },
+                {
+                  "name": "low-poly-3d",
+                  "value": "low-poly-3d"
+                },
+                {
+                  "name": "cinematic-cgi",
+                  "value": "cinematic-cgi"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Infographic_Style",
+              "displayName": "Infographic_Style",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "connector-dot-line",
+                  "value": "connector-dot-line"
+                },
+                {
+                  "name": "geometric-panels",
+                  "value": "geometric-panels"
+                },
+                {
+                  "name": "numbered-badges",
+                  "value": "numbered-badges"
+                },
+                {
+                  "name": "annotation-callouts",
+                  "value": "annotation-callouts"
+                },
+                {
+                  "name": "minimal-caption",
+                  "value": "minimal-caption"
+                },
+                {
+                  "name": "magazine-editorial",
+                  "value": "magazine-editorial"
+                },
+                {
+                  "name": "data-viz-overlay",
+                  "value": "data-viz-overlay"
+                },
+                {
+                  "name": "sticker-collage",
+                  "value": "sticker-collage"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Static_Asset_URL",
+              "displayName": "Static_Asset_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Carousel_Slide_URLs",
+              "displayName": "Carousel_Slide_URLs",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Ebook_PDF_URL",
+              "displayName": "Ebook_PDF_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Blog_Content",
+              "displayName": "Blog_Content",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Publish_Date",
+              "displayName": "Publish_Date",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Static_Notes",
+              "displayName": "Static_Notes",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Caption",
+              "displayName": "Instagram_Caption",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn_Caption",
+              "displayName": "LinkedIn_Caption",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Scraped_Text",
+              "displayName": "Scraped_Text",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source_Media_URLs",
+              "displayName": "Source_Media_URLs",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source_Subfolder_URL",
+              "displayName": "Source_Subfolder_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source URL",
+              "displayName": "Source URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Created",
+              "displayName": "Created",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Last Modified",
+              "displayName": "Last Modified",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "53ed16ce-6bbf-442b-9003-91dbe9e44086",
+      "name": "15. Create Engine Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1744,
+        -544
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('14. Build Engine Record').item.json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $(\"14. Build Engine Record\").item.json.record_id }}",
+            "Static_Processed": true
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "9e3546cf-4c3d-431c-8a54-2dd79b040506",
+      "name": "16. Mark Processed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1968,
+        -400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasfile1",
+              "leftValue": "={{ $json.manus_file_url }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2efeea1c-afa4-4e17-99b3-56e9b4113844",
+      "name": "5a. Has File?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -720,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.manus.ai/v2/usage.availableCredits",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "63429220-2a1f-40ac-b570-4dc331e9f8fe",
+      "name": "0a. Check Manus Credits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -4528,
+        48
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cred1",
+              "leftValue": "={{ Number($json.total_credits ?? ($json.data && $json.data.total_credits) ?? -1) }}",
+              "operator": {
+                "operation": "gte",
+                "type": "number"
+              },
+              "rightValue": 300
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "ed72aac2-3167-46f4-9c89-322d32592dd5",
+      "name": "0b. Credits Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4304,
+        48
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "6df1069a-cf77-40b7-a794-5bac58cebfe3",
+      "name": "0c. No Credits - Halt",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -4080,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('3. Detect Platform').item.json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [],
+          "value": {
+            "Static_Processed": true,
+            "id": "={{ $('3. Detect Platform').item.json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "aae98952-5de2-4b51-9226-2a8dd52c8acc",
+      "name": "4a2. Mark Source Processed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -2064,
+        -480
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('3. Detect Platform').item.json;\nconst prev = $input.item.json;\nreturn [{ json: { ...ctx, poll_attempt: (prev.poll_attempt || 0) + 1 } }];"
+      },
+      "id": "0be7f5cd-faad-4e35-a2f1-1807a9ee2651",
+      "name": "4b2. Poll Counter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1616,
+        -528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('4b2. Poll Counter').item.json;\nconst MAX_POLL_ATTEMPTS = 45;\nreturn [{ json: { ...ctx, poll_timed_out: (ctx.poll_attempt || 0) >= MAX_POLL_ATTEMPTS } }];"
+      },
+      "id": "17597e51-06dc-4208-adcd-9723a0962840",
+      "name": "4e. Poll Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ingest-timed-out",
+              "leftValue": "={{ $json.poll_timed_out }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "eb1aa44d-caff-4bd3-a8cf-2e7b86b9370f",
+      "name": "4f. Timed Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -720,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('3. Detect Platform').item.json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [],
+          "value": {
+            "Static_Processed": false,
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "2139d93a-8194-4803-a8a7-32de3c978cff",
+      "name": "4g. Error - Ingest Timeout",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -496,
+        -240
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Static_Enabled})",
+        "options": {}
+      },
+      "id": "cfc095c6-8c36-495b-9762-6f05c4dc3957",
+      "name": "0d. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4080,
+        -96
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "AND({Output_Type}='ingest', {Enabled})",
+        "options": {}
+      },
+      "id": "8369b888-7caa-47ad-bd47-79cfc36a9a2e",
+      "name": "0e. Load Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -3856,
+        -96
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'ingest';\nconst clients = $('0d. Load Clients').all().map(i => i.json);\nconst outputs = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Static_Enabled'] !== true) continue;\n  const row = outputs.find(o => o['Key'] === name + '::' + OUTPUT_TYPE);\n  if (!row) continue;\n  if (row['Enabled'] !== true) continue;\n  if (!c['Static_Base_ID'] || !c['Drive_Shared_Drive_ID'] || !row['Drive_Folder_ID'] || !row['Manus_Project_ID']) continue;\n  out.push({ json: {\n    client_name: name,\n    static_base_id: c['Static_Base_ID'],\n    drive_shared_drive_id: c['Drive_Shared_Drive_ID'],\n    brand_name: c['Brand_Name'] || name,\n    timezone: c['Timezone'] || 'Asia/Manila',\n    drive_folder_id: row['Drive_Folder_ID'],\n    manus_project_id: row['Manus_Project_ID']\n  }});\n}\nreturn out;"
+      },
+      "id": "cc90d1d1-3f49-41ee-ad90-08934cf7561c",
+      "name": "0f. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3632,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "c6b3e9c4-b061-40ae-8a1c-4eef264f9ca9",
+      "name": "0g. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -3408,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const loop = $('0g. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.static_base_id) { throw new Error('Could not resolve client config for this iteration. Refusing to ingest against the wrong client.'); }\nconst recs = $input.all().filter(i => i.json && i.json.id);\nif (!recs.length) { return [{ json: { has_record: false, cfg } }]; }\nreturn [{ json: { ...recs[0].json, has_record: true, cfg } }];"
+      },
+      "id": "2d80ece3-64fc-424f-9d18-66d1f70129d2",
+      "name": "1b. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2960,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.has_record }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "13e641e0-1654-41f6-98f3-81a1ac7243d1",
+      "name": "1c. Has Record?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2736,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.item.json;\nconst ctx = $('9. Prep Media List').first().json;\nconst cfg = d.cfg || {};\nconst B = 'alfredaiNoteBoundary';\nconst SOURCE_TABLE = 'tbloAZ3EVCtVtCJrj';\nconst baseId = cfg.static_base_id || '';\nconst recId = d.record_id || '';\nconst atUrl = (baseId && recId) ? ('https://airtable.com/' + baseId + '/' + SOURCE_TABLE + '/' + recId) : '';\nconst links = String(d.media_urls || '').split('\\n').filter(Boolean);\nconst lines = [\n(cfg.brand_name || cfg.client_name || '') + ' Content Engine - ingested source folder',\n'',\n'Brand: ' + (cfg.brand_name || cfg.client_name || ''),\n'Content type: Ingested source post',\n'Ingested: ' + (ctx.gen_date || '') + ' (' + ((cfg.timezone || 'Asia/Manila').split('/')[1] || 'PHT') + ')',\n'Topic: ' + (d.topic || ''),\n'Platform: ' + (ctx.platform || ''),\n'Source name: ' + (ctx.source_name || ''),\n'Source URL: ' + (d.source_url || ''),\n'Original publish date: ' + (d.publish_date || 'unknown'),\n'',\n'Airtable source record ID: ' + recId,\n'Airtable source record: ' + atUrl,\n'Airtable base: ' + baseId,\n'',\n'Source media files saved here: ' + links.length,\n'',\n'This folder holds the raw source material scraped from the link above, not generated output.',\n'Generated assets for this topic live in Static Creation > Generated, in their own dated folders.'\n];\nconst note = lines.join('\\n');\nconst meta = JSON.stringify({ name: '00_INFO.txt', parents: [ctx.folder_id], mimeType: 'text/plain' });\nconst multipart = '--' + B + '\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n' + meta + '\\r\\n--' + B + '\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n' + note + '\\r\\n--' + B + '--';\nreturn [{ json: { ...d, note_multipart: multipart } }];"
+      },
+      "id": "6dd1f103-3674-462a-a736-edec1a147522",
+      "name": "14b. Build Folder Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "multipart/related; boundary=alfredaiNoteBoundary",
+        "body": "={{ $json.note_multipart }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f1b10d24-cb1e-4a1b-965f-9e97969a43bf",
+      "name": "14c. Write Folder Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1408,
+        -384
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx=$('14b. Build Folder Note').item.json;\nconst {note_multipart,...rest}=ctx;\nreturn{json:rest};"
+      },
+      "id": "10fb7e3c-7eb2-4d14-8944-ee9904c3575d",
+      "name": "14d. Restore After Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        -384
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "3. Detect Platform": {
+      "main": [
+        [
+          {
+            "node": "4a. Manus Create Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Manus Poll": {
+      "main": [
+        [
+          {
+            "node": "4d. Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Completed?": {
+      "main": [
+        [
+          {
+            "node": "5. Manus Parse",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4e. Poll Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Manus Parse": {
+      "main": [
+        [
+          {
+            "node": "5a. Has File?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Fetch Output File": {
+      "main": [
+        [
+          {
+            "node": "5c. Parse Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5c. Parse Output": {
+      "main": [
+        [
+          {
+            "node": "8. Create Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Create Subfolder": {
+      "main": [
+        [
+          {
+            "node": "9. Prep Media List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10b. Has Media?": {
+      "main": [
+        [
+          {
+            "node": "11. Download Media",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "13. Collect Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Download Media": {
+      "main": [
+        [
+          {
+            "node": "12. Upload to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. Upload to Drive": {
+      "main": [
+        [
+          {
+            "node": "13. Collect Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15. Create Engine Record": {
+      "main": [
+        [
+          {
+            "node": "16. Mark Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5a. Has File?": {
+      "main": [
+        [
+          {
+            "node": "5b. Fetch Output File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "5c. Parse Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 min": {
+      "main": [
+        [
+          {
+            "node": "0a. Check Manus Credits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Check Manus Credits": {
+      "main": [
+        [
+          {
+            "node": "0b. Credits Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Credits Available?": {
+      "main": [
+        [
+          {
+            "node": "0d. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. No Credits - Halt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4a. Manus Create Task": {
+      "main": [
+        [
+          {
+            "node": "4a2. Mark Source Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4a2. Mark Source Processed": {
+      "main": [
+        [
+          {
+            "node": "4b. Wait 20s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Wait 20s": {
+      "main": [
+        [
+          {
+            "node": "4b2. Poll Counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b2. Poll Counter": {
+      "main": [
+        [
+          {
+            "node": "4c. Manus Poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Poll Guard": {
+      "main": [
+        [
+          {
+            "node": "4f. Timed Out?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4f. Timed Out?": {
+      "main": [
+        [
+          {
+            "node": "4g. Error - Ingest Timeout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4b. Wait 20s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0d. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0e. Load Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0e. Load Outputs": {
+      "main": [
+        [
+          {
+            "node": "0f. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0f. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0g. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0g. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Pending Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Pending Links": {
+      "main": [
+        [
+          {
+            "node": "1b. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1c. Has Record?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Has Record?": {
+      "main": [
+        [
+          {
+            "node": "3. Detect Platform",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0g. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16. Mark Processed": {
+      "main": [
+        [
+          {
+            "node": "0g. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4g. Error - Ingest Timeout": {
+      "main": [
+        [
+          {
+            "node": "0g. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Prep Media List": {
+      "main": [
+        [
+          {
+            "node": "10b. Has Media?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13. Collect Link": {
+      "main": [
+        [
+          {
+            "node": "14. Build Engine Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. Build Engine Record": {
+      "main": [
+        [
+          {
+            "node": "14b. Build Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14b. Build Folder Note": {
+      "main": [
+        [
+          {
+            "node": "14c. Write Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14c. Write Folder Note": {
+      "main": [
+        [
+          {
+            "node": "14d. Restore After Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14d. Restore After Note": {
+      "main": [
+        [
+          {
+            "node": "15. Create Engine Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "50c9fd18-d263-430c-bf8d-99d5fee62f6d",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "khcRuum1CO98Mxvi",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

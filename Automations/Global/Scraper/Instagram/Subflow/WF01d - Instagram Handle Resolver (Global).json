@@ -1,0 +1,502 @@
+{
+  "name": "WF01d - Instagram Handle Resolver (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "55 5 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger - 5:55am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        -224
+      ],
+      "id": "0b448cf4-0559-4676-b170-3b9acaffb3ca"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "filterByFormula": "AND(OR(FIND('instagram.com', {Instagram_Links}), NOT({Instagram_Links} = '')), {Instagram_Handle} = '')",
+        "options": {}
+      },
+      "name": "1. Get Sources to Resolve",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -448
+      ],
+      "id": "cdfc8e80-9752-48d5-aa91-e8a2873c72ff",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\nconst RESERVED = ['p','reel','reels','tv','stories','explore','accounts','directory','about','legal','developer'];\n\nfor (const item of items) {\n  const cfg = item.json.cfg || {};\n  const recordId = item.json.id;\n  const raw = (item.json['Instagram_Links'] || item.json['Instagram_Handle'] || '').trim();\n  if (!recordId) continue;\n\n  const fail = function (msg) { results.push({ json: { recordId, cfg, handle: '', resolved: false, resolve_error: msg } }); };\n\n  if (!raw) { fail('Instagram_Links is empty.'); continue; }\n\n  const skipPaths = ['/p/', '/reel/', '/reels/', '/tv/', '/stories/', '/explore/'];\n  if (skipPaths.some(function (p) { return raw.includes(p); })) {\n    fail('URL points at a post or reel, not a profile: ' + raw);\n    continue;\n  }\n\n  let handle = '';\n  if (raw.includes('instagram.com/@')) {\n    handle = raw.split('instagram.com/@')[1].split('/')[0].split('?')[0].trim();\n  } else if (raw.includes('instagram.com/')) {\n    handle = raw.split('instagram.com/')[1].split('/')[0].split('?')[0].replace(/^@/, '').trim();\n  } else if (raw.startsWith('@')) {\n    handle = raw.replace(/^@/, '').split('/')[0].split('?')[0].trim();\n  } else if (!raw.includes('/') && !raw.includes('.')) {\n    handle = raw.trim();\n  }\n\n  handle = handle.replace(/^@/, '');\n\n  if (!handle) { fail('Could not derive an Instagram handle from: ' + raw); continue; }\n  if (RESERVED.indexOf(handle.toLowerCase()) !== -1) { fail('Derived a reserved Instagram path, not a profile handle: ' + handle); continue; }\n\n  results.push({ json: { recordId, cfg, handle: '@' + handle, resolved: true, resolve_error: '' } });\n}\n\nreturn results;"
+      },
+      "name": "2. Resolve Instagram Handles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        -448
+      ],
+      "id": "5e6bb48e-628b-441e-b2ef-6fd364032646"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Instagram_Handle": "={{ $json.handle }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Handle",
+              "displayName": "Instagram_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "3. Update All Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        -368
+      ],
+      "id": "f16edd7f-daf0-4227-a308-c5dd619ffe21",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "5a4aa95f-6498-4206-8b6c-a6c3f0781bb4",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        336,
+        -640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "2f46580f-8b38-4ba1-96ec-42267d82e44f",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -336,
+        -224
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  out.push({ json: { client_name: name, video_base_id: c['Video_Base_ID'] } });\n}\nreturn out;"
+      },
+      "id": "3ccf1645-d1b6-42bd-88b9-599ec4d1d72b",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "8df00b8a-6cd2-4c72-9814-6cbcac613f8d",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        112,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration. Refusing to resolve against the wrong client.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "f8d99777-0673-4aca-8279-d55e9d568b8c",
+      "name": "1b. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hassrc",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "db579754-6452-4e08-bd0d-8bcc4020ffe8",
+      "name": "1c. Has Sources?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "isresolved",
+              "leftValue": "={{ $json.resolved }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "0dbd1164-6372-47fb-a1c2-bc3b56be35a3",
+      "name": "2a. Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1232,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [],
+          "value": {
+            "Status": "Pending Review",
+            "id": "={{ $json.recordId }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "1d5c69a5-668d-4f7e-8b16-f77af94a03d7",
+      "name": "3b. Flag Unresolved",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1456,
+        -176
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Trigger - 5:55am": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Sources to Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Sources to Resolve": {
+      "main": [
+        [
+          {
+            "node": "1b. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1c. Has Sources?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Has Sources?": {
+      "main": [
+        [
+          {
+            "node": "2. Resolve Instagram Handles",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Resolve Instagram Handles": {
+      "main": [
+        [
+          {
+            "node": "2a. Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2a. Resolved?": {
+      "main": [
+        [
+          {
+            "node": "3. Update All Records",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "3b. Flag Unresolved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Update All Records": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Flag Unresolved": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ff0cd39d-d908-4ff7-a7a9-3f46b5ffea44",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "SpYXaZsqxgxn0Utu",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

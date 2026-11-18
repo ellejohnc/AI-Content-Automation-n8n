@@ -1,0 +1,981 @@
+{
+  "name": "Manual Promote Handler - YouTube (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "e81f8880-99f8-4aa6-8fbf-7931e75a7918",
+      "name": "Every 1 Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        560
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "95182ea7-7b96-45a2-ba17-ff20b1bd11ed",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        272,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "filterByFormula": "AND({Status} = 'Manual Promote', {Platform} = 'YouTube', NOT({Manually_Processed}), NOT({Title} = ''))",
+        "options": {}
+      },
+      "id": "993ac675-d733-4628-b1ad-c8d17e66729a",
+      "name": "1. Get Manually Promoted Videos",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        192
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "89b80f04-78a8-466e-9e67-4b8d276d08ac",
+      "name": "2. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [],
+          "value": {
+            "Category": "={{ (() => {\n  const t = ($json['Title'] || '').toLowerCase();\n  const edu = ['how to','full course','beginner','masterclass','tutorial','guide','explained','learn ','lessons','levels of',' tips','skills','stop using',\"here's the fix\",'step by step','complete guide','from scratch','for beginners','crash course','deep dive','walkthrough','how i use','how i build','setup'];\n  for (const kw of edu) { if (t.includes(kw)) return 'Education'; }\n  const prod = ['product intro','product demo','product launch','product review','unboxing','hands on','first look'];\n  for (const kw of prod) { if (t.includes(kw)) return 'Product'; }\n  return 'News';\n})() }}",
+            "Content Type": "={{ $json['Content Type'] }}",
+            "Date Added": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "Platform": "={{ $json.Platform }}",
+            "Publish_Date": "={{ $now.plus({days: 3}).toFormat('yyyy-MM-dd') }}",
+            "Reel_Notes": "={{ 'Manually promoted on ' + $now.toFormat('yyyy-MM-dd') }}",
+            "Source Name": "={{ $json['Source Name'] }}",
+            "Source URL": "={{ $json.URL }}",
+            "Status": "Idea",
+            "Topic": "={{ $json.Title }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "7bffbffc-5e83-4a1a-b532-a2a4ee600798",
+      "name": "5. Create Reel Engine Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "filterByFormula": "={{ \"{URL} = '\" + ($json.url || '') + \"'\" }}",
+        "options": {
+          "fields": [
+            "Reel Engine",
+            "Source"
+          ]
+        }
+      },
+      "id": "151addfd-8947-48e1-a3fd-b2f2564dca1d",
+      "name": "6. Check Viral Library Duplicate",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        192
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "vl-dupe",
+              "leftValue": "={{ $json.vl_id }}",
+              "operator": {
+                "operation": "empty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "d5ec6b8c-0c28-4fdc-848f-cd0349a331a0",
+      "name": "7. Is New to Viral Library?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2960,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [],
+          "value": {
+            "Creator_Handle": "={{ $json.creator_handle }}",
+            "Platform": "={{ $json.platform }}",
+            "Processed": false,
+            "URL": "={{ $json.url }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a7956209-ebcf-4441-a972-1d53993468f2",
+      "name": "8. Create Viral Library Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3184,
+        96
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "da603e87-768a-4bb1-bc2b-4b498b711fca",
+      "name": "9. All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Associated_Sources": "={{ ($('1c. Attach Config').item.json.Associated_Sources && $('1c. Attach Config').item.json.Associated_Sources.length) ? $('1c. Attach Config').item.json.Associated_Sources : [] }}",
+            "Priority_Score": 0,
+            "id": "={{ $json.id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "584413ba-a231-4f12-ab9f-83b11d55fcf8",
+      "name": "5b. Link Source to Reel Engine",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel Engine": "={{ [$('6b. Merge VL Lookup').item.json.reel_engine_id] }}",
+            "Source": "={{ ($('6b. Merge VL Lookup').item.json.source_ids && $('6b. Merge VL Lookup').item.json.source_ids.length) ? $('6b. Merge VL Lookup').item.json.source_ids : [] }}",
+            "id": "={{ $json.id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "dff441a1-76d2-4c0c-960a-700e9e9f1d4b",
+      "name": "8b. Link Source + Reel Engine to VL",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3408,
+        96
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Viral_Pattern_Used": "={{ [$('8. Create Viral Library Record').item.json.id] }}",
+            "id": "={{ $('6b. Merge VL Lookup').item.json.reel_engine_id }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "8d. Link Viral Pattern to Reel Engine",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        96
+      ],
+      "id": "0a12288f-31d1-4312-8e83-ef128506ee73",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "8e. Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4080,
+        368
+      ],
+      "id": "5ccdab75-9640-4ded-aa4e-68087c68a5ac"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Manually_Processed": true,
+            "id": "={{ $('6b. Merge VL Lookup').item.json.video_record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "e4a51cee-2821-489f-b670-ed802fa139ae",
+      "name": "Mark Processed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3856,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel Engine": "={{ (($json.vl_reel_engine || []).map(r => (typeof r === 'object' ? r.id : r))).concat([$json.reel_engine_id]) }}",
+            "Source": "={{ ($json.source_ids && $json.source_ids.length) ? $json.source_ids : [] }}",
+            "id": "={{ $json.vl_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "6a153c28-6785-43d2-8c94-405b7e5648d4",
+      "name": "7a. Append Reel Engine to Existing VL",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3408,
+        288
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Viral_Pattern_Used": "={{ [$('6b. Merge VL Lookup').item.json.vl_id] }}",
+            "id": "={{ $('6b. Merge VL Lookup').item.json.reel_engine_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "ed72d68b-6afd-4940-a8c6-61a8beea945e",
+      "name": "7c. Link Existing VL to Reel Engine VPU",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        288
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "b459db1e-b7b1-48c2-9047-bd617c66c4f6",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        496,
+        464
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  out.push({ json: { client_name: name, video_base_id: c['Video_Base_ID'] } });\n}\nreturn out;"
+      },
+      "id": "1dd5eb83-9d1e-44d5-ab12-ddb069e69ace",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "cfb4a523-0ba7-442c-86cd-191e39aef4d3",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        944,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "f9cfe135-0ae5-48fe-913d-4411f14ddb6f",
+      "name": "1c. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const v = $('1c. Attach Config').item.json;\nconst re = $input.item.json;\nreturn { json: {\n  cfg: v.cfg,\n  video_record_id: v.id || '',\n  url: v.URL || '',\n  platform: v.Platform || '',\n  creator_handle: v['Creator_Handle'] || v['Source Name'] || '',\n  source_ids: v.Associated_Sources || [],\n  reel_engine_id: re.id || ''\n} };"
+      },
+      "id": "6899a0ae-7b55-46e9-a3fd-d54d7e6a9503",
+      "name": "5bb. Reel Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Airtable search emits one item per input (alwaysOutputData covers the no-match case),\n// so lookups align 1:1 with the context items from 5bb.\nconst lookups = $input.all();\nconst ctx = $('5bb. Reel Context').all();\nreturn lookups.map((l, i) => {\n  const base = (ctx[i] && ctx[i].json) ? ctx[i].json : {};\n  const found = l.json || {};\n  return { json: { ...base, vl_id: found.id || '', vl_reel_engine: found['Reel Engine'] || [], vl_source: found['Source'] || [] } };\n});"
+      },
+      "id": "b1dd3f39-a527-4e75-9eaa-6aa078681e66",
+      "name": "6b. Merge VL Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2736,
+        192
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "7. Is New to Viral Library?": {
+      "main": [
+        [
+          {
+            "node": "8. Create Viral Library Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7a. Append Reel Engine to Existing VL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8d. Link Viral Pattern to Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "Mark Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Processed": {
+      "main": [
+        [
+          {
+            "node": "8e. Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Create Reel Engine Record": {
+      "main": [
+        [
+          {
+            "node": "5b. Link Source to Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7c. Link Existing VL to Reel Engine VPU": {
+      "main": [
+        [
+          {
+            "node": "Mark Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 Hour": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "9. All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Manually Promoted Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Manually Promoted Videos": {
+      "main": [
+        [
+          {
+            "node": "1c. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "2. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "5. Create Reel Engine Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Link Source to Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "5bb. Reel Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5bb. Reel Context": {
+      "main": [
+        [
+          {
+            "node": "6. Check Viral Library Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Check Viral Library Duplicate": {
+      "main": [
+        [
+          {
+            "node": "6b. Merge VL Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Merge VL Lookup": {
+      "main": [
+        [
+          {
+            "node": "7. Is New to Viral Library?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Create Viral Library Record": {
+      "main": [
+        [
+          {
+            "node": "8b. Link Source + Reel Engine to VL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8b. Link Source + Reel Engine to VL": {
+      "main": [
+        [
+          {
+            "node": "8d. Link Viral Pattern to Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a. Append Reel Engine to Existing VL": {
+      "main": [
+        [
+          {
+            "node": "7c. Link Existing VL to Reel Engine VPU",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8e. Done": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "4a50e40f-fddc-4741-be7e-ee8193fbd0b5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "77KK8hdxuDPsUmAP",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}

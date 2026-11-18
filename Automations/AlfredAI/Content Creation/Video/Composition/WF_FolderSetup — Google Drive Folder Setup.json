@@ -1,0 +1,1014 @@
+{
+  "name": "WF_FolderSetup — Google Drive Folder Setup",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "7a5529cc-bdc2-47c7-9334-f39e2db83b2e",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1088,
+        -160
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "440c0cda-d6e6-4903-85e1-00e50228f5ac",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1088,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "filterByFormula": "AND({Status} = 'B-Roll Idea Done', {Asset_Folder_URL} = '')",
+        "options": {}
+      },
+      "id": "5f58088c-86b4-47f7-aab1-9db93b202b29",
+      "name": "1. Get Records Needing Folders",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        -240
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "any-check",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a9d1b869-24fc-4f29-9989-26d1b04c1f77",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -640,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "3967f9a6-a4c0-411e-83fc-c6946a374738",
+      "name": "1c. Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -416,
+        -240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "de3172bd-cd5e-403d-bbbd-c74c143f6a35",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -192,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "d6112944-8a42-417f-9339-7065042e8f41",
+      "name": "1d. Wait 2s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        -192,
+        -432
+      ],
+      "webhookId": "wffs-wait-hook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nconst rawTopic = item['Topic'] || 'untitled';\nconst topic_slug = rawTopic\n  .replace(/[^a-zA-Z0-9\\s]/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .replace(/\\s/g, '_')\n  .substring(0, 60)\n  .toLowerCase();\nreturn { json: {\n  record_id: item.id || '',\n  topic: rawTopic,\n  topic_slug: topic_slug\n}};"
+      },
+      "id": "692225b7-06ff-49db-9702-3a0e4e97475d",
+      "name": "2. Extract Record Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $json.topic }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1nVHxT-Bh_m2SAkp1yGy6SxEn5PUhHrPK",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "239f361f-559e-43a0-8aac-0497c453a9e4",
+      "name": "3. Create Assets Topic Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        256,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderData = $input.item.json;\nconst data = $('2. Extract Record Data').first().json;\nreturn { json: { ...data, assets_root_id: folderData.id, assets_root_url: `https://drive.google.com/drive/folders/${folderData.id}` } };"
+      },
+      "id": "b5c2a31c-49c2-4d3b-af25-263c00840902",
+      "name": "3b. Store Assets Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "construction",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.assets_root_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "4e71eab3-9e6e-4f9b-90d4-feb9c6ecb2e7",
+      "name": "4a. Create construction/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        704,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('3b. Store Assets Folder ID').first().json } };"
+      },
+      "id": "82372152-b137-40fc-854f-f6a2e253a6ba",
+      "name": "4a. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "ai-technology",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.assets_root_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "3c354d03-c697-4baf-a305-72dd4f538a62",
+      "name": "4b. Create ai-technology/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1152,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('3b. Store Assets Folder ID').first().json } };"
+      },
+      "id": "d8774a1b-e677-4afd-91b6-1f106a85018a",
+      "name": "4b. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "people",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.assets_root_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "89b46e13-afd5-43b0-8b47-45e816fb82e4",
+      "name": "4c. Create people/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1600,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('3b. Store Assets Folder ID').first().json } };"
+      },
+      "id": "80949f1d-848f-4fc0-a152-8b27d9ed9e2d",
+      "name": "4c. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "research-papers",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.assets_root_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "38dece6e-c2e1-425d-8dc3-f662cafc2127",
+      "name": "4d. Create research-papers/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2048,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('3b. Store Assets Folder ID').first().json } };"
+      },
+      "id": "8aebeae5-51fc-4349-9886-33e1182b546e",
+      "name": "4d. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "data-charts",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.assets_root_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "987937c5-60cd-4944-a51e-3b24723a04b5",
+      "name": "4e. Create data-charts/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2496,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('3b. Store Assets Folder ID').first().json } };"
+      },
+      "id": "3166e1d0-c2b2-4d83-82f3-136f14189c58",
+      "name": "4e. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "buildings",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.assets_root_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "5eba1ba9-8e03-4d90-a054-8169e693fa84",
+      "name": "4f. Create buildings/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2944,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('3b. Store Assets Folder ID').first().json } };"
+      },
+      "id": "2f54a0cc-2e6a-4e77-b502-e2b381413aff",
+      "name": "4f. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3168,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "company-logos",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.assets_root_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "ada3d7f9-a4d3-4c75-ac25-d7200220450f",
+      "name": "4g. Create company-logos/",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3392,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('2. Extract Record Data').first().json } };"
+      },
+      "id": "9c6a025f-d676-4d6f-8c18-fe7a2d334fed",
+      "name": "4g. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3616,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $json.topic_slug }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1ed9hwZlCK9lxPUVYsMVsyUzMSgGP3MJ0",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "5b7b7601-56a4-40a2-b650-1741439d60a0",
+      "name": "5. Create Composited Videos Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3840,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$('2. Extract Record Data').first().json } };"
+      },
+      "id": "82cebeaf-5063-449f-a9dc-40e6248fe488",
+      "name": "5. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4064,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $json.topic_slug }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "MyDrive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1OD04Ne7r1tIITjBrEoEs6UvvMj_KB3cZ",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "03adc9f2-3d8a-49b9-9bbb-a495eb8fa1b2",
+      "name": "6. Create Motion Graphics Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4288,
+        -432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('2. Extract Record Data').first().json;\nconst assetsRoot = $('3b. Store Assets Folder ID').first().json;\nconst compositedFolder = $('5. Create Composited Videos Folder').first().json;\nconst motionFolder = $input.item.json;\nreturn { json: {\n  record_id: data.record_id,\n  asset_folder_url: assetsRoot.assets_root_url,\n  composited_folder_url: `https://drive.google.com/drive/folders/${compositedFolder.id}`,\n  motion_folder_url: `https://drive.google.com/drive/folders/${motionFolder.id}`\n}};"
+      },
+      "id": "2a384d78-9f3c-411d-9d9d-b4df291f44e4",
+      "name": "7. Collect All Folder URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4512,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Asset_Folder_URL": "={{ $json.asset_folder_url }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "048ec966-b471-4d74-97d3-0d966eb3ee13",
+      "name": "8. Write Folder URLs to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4736,
+        -432
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "cb301cc2-6232-47f6-bcbb-885f9e270293",
+      "name": "9. Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4960,
+        -256
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "1. Get Records Needing Folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. Get Records Needing Folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Records Needing Folders": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "1c. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Batch of 1": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1d. Wait 2s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d. Wait 2s": {
+      "main": [
+        [
+          {
+            "node": "2. Extract Record Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Extract Record Data": {
+      "main": [
+        [
+          {
+            "node": "3. Create Assets Topic Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Create Assets Topic Folder": {
+      "main": [
+        [
+          {
+            "node": "3b. Store Assets Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Store Assets Folder ID": {
+      "main": [
+        [
+          {
+            "node": "4a. Create construction/",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4a. Create construction/": {
+      "main": [
+        [
+          {
+            "node": "4a. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4a. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4b. Create ai-technology/",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Create ai-technology/": {
+      "main": [
+        [
+          {
+            "node": "4b. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4c. Create people/",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Create people/": {
+      "main": [
+        [
+          {
+            "node": "4c. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4d. Create research-papers/",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Create research-papers/": {
+      "main": [
+        [
+          {
+            "node": "4d. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4e. Create data-charts/",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Create data-charts/": {
+      "main": [
+        [
+          {
+            "node": "4e. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4f. Create buildings/",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4f. Create buildings/": {
+      "main": [
+        [
+          {
+            "node": "4f. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4f. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4g. Create company-logos/",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4g. Create company-logos/": {
+      "main": [
+        [
+          {
+            "node": "4g. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4g. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "5. Create Composited Videos Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Create Composited Videos Folder": {
+      "main": [
+        [
+          {
+            "node": "5. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "6. Create Motion Graphics Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Create Motion Graphics Folder": {
+      "main": [
+        [
+          {
+            "node": "7. Collect All Folder URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Collect All Folder URLs": {
+      "main": [
+        [
+          {
+            "node": "8. Write Folder URLs to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Write Folder URLs to Airtable": {
+      "main": [
+        [
+          {
+            "node": "9. Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Done": {
+      "main": [
+        [
+          {
+            "node": "1c. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "18c1e9fe-8c53-45d5-a74f-cf3a27204290",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "UPSe4LUPblnWsUXZ",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    },
+    {
+      "updatedAt": "2026-02-12T01:13:37.643Z",
+      "createdAt": "2026-02-12T01:13:37.643Z",
+      "id": "L8r5R8kEQXaUFlQO",
+      "name": "AlfredAI Content"
+    }
+  ]
+}

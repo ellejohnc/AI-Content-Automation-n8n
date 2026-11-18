@@ -1,0 +1,262 @@
+{
+  "name": "WF01d - Instagram Handle Resolver (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "55 5 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger - 5:55am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        -400
+      ],
+      "id": "3630666f-1458-44b4-8645-bbb0c8c5597f"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "filterByFormula": "AND(OR(FIND('instagram.com', {Instagram_Links}), NOT({Instagram_Links} = '')), {Instagram_Handle} = '')",
+        "options": {}
+      },
+      "name": "1. Get Sources to Resolve",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        -400
+      ],
+      "id": "d0eabb91-e4cc-4d3e-9167-17e2e9a26dcf",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const url = item.json['Instagram_Links'] || item.json['Links'] || '';\n  const recordId = item.json.id;\n  let handle = '';\n\n  if (!url) continue;\n\n  // Skip post/reel/tv/story paths — these are not profile URLs\n  const skipPaths = ['/p/', '/reel/', '/tv/', '/stories/', '/explore/'];\n  if (skipPaths.some(p => url.includes(p))) continue;\n\n  if (url.includes('instagram.com/@')) {\n    handle = url.split('instagram.com/@')[1].split('/')[0].split('?')[0].trim();\n  } else if (url.includes('instagram.com/')) {\n    const part = url.split('instagram.com/')[1].split('/')[0].split('?')[0].replace('@', '').trim();\n    if (part && part !== 'p' && part !== 'reel' && part !== 'tv' && part !== 'stories') {\n      handle = part;\n    }\n  } else if (url.startsWith('@')) {\n    handle = url.replace('@', '').split('/')[0].trim();\n  } else if (url && !url.includes('/') && !url.includes('.')) {\n    handle = url.trim();\n  }\n\n  if (!handle) {\n    console.log('Could not extract handle from: ' + url);\n    continue;\n  }\n\n  results.push({\n    json: { recordId, handle: '@' + handle.replace(/^@/, '') }\n  });\n}\n\nconsole.log('[2] Resolved ' + results.length + ' handles from ' + items.length + ' sources');\nreturn results;\n"
+      },
+      "name": "2. Resolve Instagram Handles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        -400
+      ],
+      "id": "ebf496b9-ec4b-44b3-b211-5f72edfed815"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        112,
+        -400
+      ],
+      "id": "0e4e4ed4-57fe-40a8-8f0c-cebca65c7b43"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "name": "Wait 2s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        336,
+        -464
+      ],
+      "id": "4fd5c4f4-9c6b-4eca-b55e-62438568ac74",
+      "webhookId": "ig-handle-resolver-wait-001"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Instagram_Handle": "={{ $json.handle }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Handle",
+              "displayName": "Instagram_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "3. Update All Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -400
+      ],
+      "id": "21dcff85-3c70-486c-8f91-db9b2223da03",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Trigger - 5:55am": {
+      "main": [
+        [
+          {
+            "node": "1. Get Sources to Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Sources to Resolve": {
+      "main": [
+        [
+          {
+            "node": "2. Resolve Instagram Handles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Resolve Instagram Handles": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch of 1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait 2s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2s": {
+      "main": [
+        [
+          {
+            "node": "3. Update All Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Update All Records": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "289fb7be-a89b-437a-a27b-9a7e26a4d6e2",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "AP5jD4WlUw9fgAtd",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}

@@ -1,0 +1,1298 @@
+{
+  "name": "WF_PUB-1 Import to Publishing (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "5acf52c0-e274-4306-bc00-4b40c4d6e9f5",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appsHn5Vfwdc9mWOh"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblRn8jf51Cd4Gc4z"
+        },
+        "filterByFormula": "{Active}",
+        "options": {}
+      },
+      "id": "005d93a6-a09b-4bc6-b7ad-329ffee0bf10",
+      "name": "A1. Load Brands",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        224,
+        288
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "options": {}
+      },
+      "id": "df10e597-1855-432f-86ea-a2a0e6780d3a",
+      "name": "A2. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        288
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appsHn5Vfwdc9mWOh"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblyigDCn3l0Ly5gT"
+        },
+        "options": {}
+      },
+      "id": "2ea5c838-1a75-4dcf-af49-7dfaafdb8c30",
+      "name": "A3. Load Accounts",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        672,
+        288
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appsHn5Vfwdc9mWOh"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbly5qOCxUb6bqat2"
+        },
+        "filterByFormula": "NOT({Source_Record_ID} = '')",
+        "options": {
+          "fields": [
+            "Source_Record_ID"
+          ]
+        }
+      },
+      "id": "bf04e59d-1fc4-4106-bc86-8c31a3687b7c",
+      "name": "A4. Load Existing Posts",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        896,
+        288
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const brands = $('A1. Load Brands').all().map(i => i.json).filter(b => b.id && b.Brand && b.Active === true);\nconst clients = $('A2. Load Clients').all().map(i => i.json);\nconst accounts = $('A3. Load Accounts').all().map(i => i.json);\nconst ORDER = ['Instagram', 'TikTok', 'LinkedIn'];\nconst BASE_FILTER = \"{Status}='Final and Ready', {Scheduled_For}!=''\";\nlet wh = null;\ntry {\n  if ($('Webhook Pub Import').isExecuted) {\n    wh = $('Webhook Pub Import').first().json.body;\n    if (typeof wh === 'string') { try { wh = JSON.parse(wh); } catch (e) { wh = {}; } }\n    wh = wh || {};\n  }\n} catch (e) { wh = null; }\nconst out = [];\nfor (const b of brands) {\n  const name = String(b.Brand).trim();\n  const c = clients.find(x => String(x.Client_Name || '').trim().toLowerCase() === name.toLowerCase());\n  const raw = c && Array.isArray(c.Platforms) ? c.Platforms.map(p => String(p)) : [];\n  const platforms = ORDER.filter(p => raw.includes(p));\n  const account_ids = accounts\n    .filter(a => String(a.Brand || '') === name && platforms.includes(String(a.Platform || '')))\n    .sort((x, y) => ORDER.indexOf(String(x.Platform)) - ORDER.indexOf(String(y.Platform)))\n    .map(a => a.id);\n  const common = { brand: name, platforms, account_ids, record_id: '', filter: 'AND(' + BASE_FILTER + ')', config_error: !c ? 'Brand ' + name + ' not found in CONTROL Clients' : (!platforms.length ? 'Brand ' + name + ' has no Platforms in CONTROL Clients' : '') };\n  if (b.Static_Base_ID) out.push({ json: { ...common, base_id: String(b.Static_Base_ID).trim(), kind: 'static', source_table: 'Static Engine' } });\n  if (b.Video_Base_ID) out.push({ json: { ...common, base_id: String(b.Video_Base_ID).trim(), kind: 'video', source_table: 'Reel Engine' } });\n}\nif (wh) {\n  const recordId = String(wh.recordId || '').trim();\n  const baseId = String(wh.baseId || '').trim();\n  const okIds = /^rec[A-Za-z0-9]{14}$/.test(recordId) && /^app[A-Za-z0-9]{14}$/.test(baseId);\n  const hit = okIds ? out.filter(o => o.json.base_id === baseId) : [];\n  if (!hit.length) {\n    return [{ json: { brand: 'webhook', platforms: [], account_ids: [], base_id: 'appWEBHOOKINVALID', kind: 'static', source_table: '', record_id: okIds ? recordId : '', filter: 'FALSE()',\n      config_error: okIds ? 'Webhook baseId ' + baseId + ' is not the Static or Video base of an active brand (record ' + recordId + ')' : 'Webhook body needs a valid recordId and baseId (got recordId \"' + recordId.slice(0, 40) + '\", baseId \"' + baseId.slice(0, 40) + '\")' } }];\n  }\n  return hit.map(o => ({ json: { ...o.json, record_id: recordId, filter: \"AND(RECORD_ID()='\" + recordId + \"', \" + BASE_FILTER + ')' } }));\n}\nreturn out;"
+      },
+      "id": "19ba71b2-356e-455e-8d0b-cf3e2cf8b6ca",
+      "name": "B1. Build Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.airtable.com/v0/{{ $json.base_id }}/tblSBKG2Zx2nZUPIT",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "={{ $json.filter }}"
+            },
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "e7ed570d-6f96-4a43-9a79-ee6a029cddcc",
+      "name": "B2. Search Source Records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        288
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const TABLE = 'tblSBKG2Zx2nZUPIT';\nconst MAX_PER_RUN = 10;\nconst sources = $('B1. Build Sources').all().map(i => i.json);\nconst existing = new Set($('A4. Load Existing Posts').all().map(i => String(i.json.Source_Record_ID || '').trim()).filter(Boolean));\nconst seen = new Set();\nconst out = [];\n\nfunction ref(v) {\n  v = String(v || '').trim();\n  if (!v) return null;\n  let m = v.match(/\\/folders\\/([A-Za-z0-9_-]{10,})/);\n  if (m) return { type: 'folder', id: m[1] };\n  m = v.match(/\\/file\\/d\\/([A-Za-z0-9_-]{10,})/) || v.match(/[?&]id=([A-Za-z0-9_-]{10,})/);\n  if (m) return { type: 'file', id: m[1] };\n  if (/^https?:\\/\\//i.test(v)) return { type: 'url', url: v };\n  if (/^[A-Za-z0-9_-]{20,}$/.test(v)) return { type: 'file', id: v };\n  return null;\n}\nconst lines = v => String(v || '').split(/[\\n,]+/).map(ref).filter(Boolean);\nconst str = v => (v == null ? '' : (typeof v === 'object' ? (v.name || '') : String(v))).trim();\n\n$input.all().forEach((it, idx) => {\n  const s = sources[idx];\n  const r = it.json || {};\n  if (!s || s.config_error || !Array.isArray(r.records)) return;\n  for (const rec of r.records) {\n    if (!rec || !rec.id || existing.has(rec.id) || seen.has(rec.id)) continue;\n    seen.add(rec.id);\n    const f = rec.fields || {};\n    const outFmt = str(f.Output_Format);\n    let format = 'Image', mode = 'image', refs = [];\n    if (s.kind === 'video') {\n      format = 'Reel'; mode = 'video';\n      refs = [];\n    } else if (outFmt === 'Carousel') {\n      format = 'Carousel'; mode = 'carousel';\n      refs = lines(f.Carousel_Slide_URLs).filter(x => x.type !== 'url');\n      if (!refs.length) refs = [ref(f.Static_Asset_URL), ref(f.Drive_File_ID)].filter(x => x && x.type !== 'url').slice(0, 1);\n    } else {\n      const first = [ref(f.Drive_File_ID), ref(f.Static_Asset_URL)].concat(lines(f.Carousel_Slide_URLs)).filter(Boolean)[0];\n      refs = first ? [first] : [];\n      format = (outFmt === 'Image' || refs.length) ? 'Image' : 'Text';\n      mode = refs.length ? 'image' : 'none';\n    }\n    const content = s.kind === 'video'\n      ? str(f.Script)\n      : ([f.Blog_Content, f.LinkedIn_Caption, f.Instagram_Caption, f.Scraped_Text].map(str).find(t => t && !/^https?:\\/\\/\\S+$/i.test(t)) || '');\n    out.push({ json: {\n      brand: s.brand, platforms: s.platforms, account_ids: s.account_ids, kind: s.kind,\n      source_base_id: s.base_id, source_table: s.source_table, source_record_id: rec.id,\n      source_record_url: 'https://airtable.com/' + s.base_id + '/' + TABLE + '/' + rec.id,\n      topic_src: str(f.Topic), scheduled_for: f.Scheduled_For || null,\n      output_format: outFmt, format, media_mode: mode, media_refs: refs,\n      ig_src: str(f.Instagram_Caption), li_src: str(f.LinkedIn_Caption),\n      content: content.slice(0, 6000)\n    } });\n  }\n});\nout.sort((a, b) => String(a.json.scheduled_for || '').localeCompare(String(b.json.scheduled_for || '')));\nreturn out.slice(0, MAX_PER_RUN);"
+      },
+      "id": "d84d2606-71dc-4421-8df7-def338785645",
+      "name": "B3. Build Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        176
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f52ab574-877b-4b03-86b1-f6ee62d0a772",
+      "name": "L. All Posts Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst VOICE = {\n  AlfredAI: 'practical AI for construction: plain-spoken, useful, focused on real jobsite and project outcomes',\n  Palantir: 'structural engineering expertise: precise, technical, authoritative, code- and practice-aware'\n};\nconst need = [];\nif (!d.topic_src) need.push('topic');\nif (d.platforms.includes('Instagram') && !d.ig_src) need.push('instagram');\nif (d.platforms.includes('LinkedIn') && !d.li_src) need.push('linkedin');\nif (d.platforms.includes('TikTok')) need.push('tiktok');\nconst system = [\n  'You write social media captions for a brand. Return ONLY a JSON object with exactly these keys: \"topic\", \"instagram\", \"linkedin\", \"tiktok\". Use an empty string for any key not requested.',\n  'Rules for every caption: plain text only, no markdown, no URLs, emojis sparingly (0-2).',\n  'topic: a short topic of at most 8 words, no trailing punctuation.',\n  'instagram: up to 2,200 characters, a strong first line, then 3-5 hashtags at the very end.',\n  'linkedin: professional, the first two lines carry the point, up to 3,000 characters, 0-3 hashtags at the end.',\n  'tiktok: a short hook plus 3-5 hashtags, under 300 characters in total.'\n].join('\\n');\nconst user = JSON.stringify({\n  brand: d.brand,\n  brand_voice: VOICE[d.brand] || 'professional and clear',\n  requested_keys: need,\n  topic: d.topic_src || '',\n  existing_captions: { instagram: d.ig_src || '', linkedin: d.li_src || '' },\n  content: d.content || d.topic_src || ''\n});\nreturn [{ json: { ...d, need, system_prompt: system, user_prompt: 'Write only the requested keys. Input:\\n' + user } }];"
+      },
+      "id": "4063c5f8-d1f4-4c10-8d92-08890998a3aa",
+      "name": "C1. Build Caption Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4.1-mini', temperature: 0.7, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: $json.system_prompt }, { role: 'user', content: $json.user_prompt } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 90000
+        }
+      },
+      "id": "99dc147f-c0d9-4c4a-86fc-43dd44eb3c9b",
+      "name": "C2. OpenAI Captions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "x9t1HtZVkPLKi1dp",
+          "name": "OpenAI Bearer Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('C1. Build Caption Request').first().json;\nlet r = $input.first().json || {};\nif (typeof r.data === 'string') { try { r = JSON.parse(r.data); } catch (e) { r = { error: r.data.slice(0, 300) }; } }\nlet gen = {}; let capErr = '';\nif (r.error) capErr = typeof r.error === 'object' ? (r.error.message || JSON.stringify(r.error)) : String(r.error);\nelse {\n  try { gen = JSON.parse(((r.choices || [])[0] || {}).message.content || '{}'); }\n  catch (e) { capErr = 'OpenAI returned text that was not valid JSON'; }\n}\nfunction strip(t) {\n  return String(t || '')\n    .replace(/\\r/g, '')\n    .replace(/^#{1,6}\\s+/gm, '')\n    .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')\n    .replace(/__([^_]+)__/g, '$1')\n    .replace(/(^|\\s)\\*([^*\\n]+)\\*(?=\\s|$)/g, '$1$2')\n    .replace(/`+/g, '')\n    .replace(/\\[([^\\]]+)\\]\\((?:[^)]+)\\)/g, '$1')\n    .replace(/^\\s*[*+]\\s+/gm, '- ')\n    .trim();\n}\nfunction noUrls(t) { return String(t || '').replace(/https?:\\/\\/\\S+/gi, '').replace(/[ \\t]{2,}/g, ' ').trim(); }\nfunction cap(t, n) {\n  t = String(t || '');\n  if (t.length <= n) return t;\n  const cut = t.slice(0, n);\n  const i = cut.lastIndexOf(' ');\n  return (i > n * 0.8 ? cut.slice(0, i) : cut).trim();\n}\nconst g = k => (typeof gen[k] === 'string' ? gen[k] : '');\nconst has = p => d.platforms.includes(p);\nconst problems = [];\nif (capErr && d.need.length) problems.push('Caption call failed: ' + capErr);\n\nlet topic = d.topic_src, topicSrc = 'source';\nif (!topic) {\n  topic = cap(noUrls(strip(g('topic'))).split(/\\s+/).slice(0, 8).join(' '), 100);\n  topicSrc = topic ? 'generated' : 'missing';\n  if (!topic) { topic = 'Untitled ' + d.brand + ' post'; problems.push('Topic could not be generated'); }\n}\nfunction pick(platform, key, src, limit) {\n  if (!has(platform)) return { text: '', label: '' };\n  if (src) return { text: strip(src), label: platform + ' from source' };\n  const t = cap(noUrls(strip(g(key))), limit);\n  if (!t) problems.push(platform + ' caption not generated');\n  return { text: t, label: platform + (t ? ' generated' : ' missing') };\n}\nconst ig = pick('Instagram', 'instagram', d.ig_src, 2200);\nconst li = pick('LinkedIn', 'linkedin', d.li_src, 3000);\nconst tt = pick('TikTok', 'tiktok', '', 299);\nconst labels = [ig.label, li.label, tt.label].filter(Boolean);\n\nconst fields = {\n  fldGVBHHhPOs0iMzk: topic,\n  fldLLx1MxCbo1YMk1: 'Ready for Review',\n  fldikoXu1b0lSJAdc: [d.brand],\n  fldcxI02uuW9wURoB: d.platforms,\n  fldELPaGBRMd5tANL: d.format,\n  fldwhpxkAVFoykdtI: d.source_base_id,\n  fldb5uCS7tmObHeCE: d.source_table,\n  fldNmcuPzS1KEsjlR: d.source_record_id,\n  fldbhw0C8XQL51mlT: d.source_record_url,\n  fld8mzezpcERkCE91: d.account_ids\n};\nif (d.scheduled_for) fields.fld5Thc5mvjV3Hw5l = d.scheduled_for;\nif (ig.text) fields.fldWVBjE44GWpSrpF = ig.text;\nif (li.text) fields.fldb8R3UwP6M3UOJb = li.text;\nif (tt.text) fields.fldSdMzEtUAdR4r5z = tt.text;\nif (!d.account_ids.length) problems.push('No Accounts rows found for ' + d.brand);\n\nreturn [{ json: {\n  ...d, topic, topic_label: topicSrc, caption_labels: labels, problems,\n  dup_filter: \"{Source_Record_ID}='\" + d.source_record_id + \"'\",\n  create_body: { records: [{ fields }], typecast: true }\n} }];"
+      },
+      "id": "db402f6b-9105-441e-980c-2efcce29bab3",
+      "name": "C3. Parse Captions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((($json.records || []).length) ? { records: [] } : $('C3. Parse Captions').first().json.create_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "414639cc-b4c2-458d-b028-0b5210dfb875",
+      "name": "D1. Create Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2688,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('C3. Parse Captions').first().json;\nconst r = $input.first().json || {};\nconst chk = $('D0. Recheck Posts').first().json || {};\nconst dup = (Array.isArray(chk.records) && chk.records[0] && chk.records[0].id) ? chk.records[0].id : '';\nconst rec = (!dup && Array.isArray(r.records)) ? r.records[0] : null;\nlet create_error = '';\nif (dup) create_error = 'Skipped: source record already has Posts row ' + dup + ' (imported by another run)';\nelse if (!rec || !rec.id) {\n  const e = r.error;\n  create_error = e ? (typeof e === 'object' ? ((e.type ? e.type + ': ' : '') + (e.message || JSON.stringify(e))) : String(e)) : 'Airtable did not return a record';\n}\nreturn [{ json: { ...d, post_id: rec && rec.id ? rec.id : '', post_number: rec && rec.fields ? (rec.fields.ID || rec.fields.fldMZqgHtAAjPZqV5 || '') : '', create_error, duplicate_of: dup } }];"
+      },
+      "id": "3558d88c-e53e-404e-8e7c-a61d5cd133ec",
+      "name": "D2. After Create",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('D2. After Create').first().json;\nconst Q = '&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives';\nconst out = [];\nif (d.post_id && d.media_mode !== 'none' && d.media_mode !== 'video') {\n  for (const r of d.media_refs) {\n    if (r.type === 'file') out.push({ json: { type: 'file', id: r.id, lookup_url: 'https://www.googleapis.com/drive/v3/files/' + r.id + '?fields=id,name,mimeType,size&supportsAllDrives=true' } });\n    else if (r.type === 'folder') out.push({ json: { type: 'folder', id: r.id, lookup_url: 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(\"'\" + r.id + \"' in parents and trashed=false\") + '&fields=files(id,name,mimeType,size)&orderBy=name&pageSize=100' + Q } });\n  }\n}\nif (!out.length) out.push({ json: { marker: true, lookup_url: 'https://www.googleapis.com/drive/v3/about?fields=kind' } });\nreturn out;"
+      },
+      "id": "2b6953d8-a325-4104-bbdc-a8eeeceeb107",
+      "name": "E1. Media Refs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.lookup_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "d8a5e504-2dfc-4e2e-8faf-253424e08dbd",
+      "name": "E2. Drive Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('D2. After Create').first().json;\nconst refs = $('E1. Media Refs').all().map(i => i.json);\nconst res = $input.all().map(i => i.json || {});\nconst problems = [];\nconst video = d.media_mode === 'video';\nconst carousel = d.media_mode === 'carousel';\nconst isPdf = x => String(x.mimeType || '') === 'application/pdf' || /\\.pdf$/i.test(String(x.name || ''));\nlet files = [];\nconst media_urls = [];\nres.forEach((r, i) => {\n  const ref = refs[i];\n  if (!ref || ref.marker) return;\n  if (r.error) { problems.push('Drive lookup failed for ' + ref.type + ' ' + ref.id + ': ' + (r.error.message || JSON.stringify(r.error))); return; }\n  const list = ref.type === 'folder' ? (r.files || []) : [r];\n  const hits = list.filter(x => carousel ? isPdf(x) : String(x.mimeType || '').startsWith('image/'))\n    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));\n  if (!hits.length && !carousel) problems.push('No image file in Drive ' + ref.type + ' ' + ref.id);\n  files = files.concat(hits);\n});\nif (d.post_id && !video) {\n  if (d.media_mode === 'none') problems.push('No media on the source record');\n  else if (carousel && !files.length && !problems.length) problems.push('No carousel PDF in the Drive folder');\n  else if (!d.media_refs.length) problems.push('Media field on the source record is empty');\n}\nif (!video && !carousel) for (const r of d.media_refs) if (r.type === 'url') media_urls.push(r.url);\nif (video) files = [];\nelse if (carousel) {\n  if (files.length > 1) problems.push('Drive folder has ' + files.length + ' PDFs; used ' + files[0].name);\n  files = files.slice(0, 1);\n} else if (files.length > 1) files = files.slice(0, 1);\nconst base = { problems, media_urls, files_found: files.length };\nif (!files.length) return [{ json: { ...base, marker: true } }];\nreturn files.map((f, i) => ({ json: { ...base, marker: false, file_id: f.id, name: f.name, mimeType: f.mimeType, size: Number(f.size || 0), order: i } }));"
+      },
+      "id": "7119d02c-2b89-4096-b4a0-e0d2adbe01c6",
+      "name": "E3. Flatten Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.marker ? 'https://www.googleapis.com/drive/v3/about?fields=kind' : 'https://www.googleapis.com/drive/v3/files/' + $json.file_id + '?alt=media&supportsAllDrives=true' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "d7073dc3-7573-44cd-a836-5e5382052d4f",
+      "name": "E4. Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3808,
+        192
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "width": 1440,
+        "height": 1800,
+        "resizeOption": "onlyIfLarger",
+        "options": {
+          "format": "jpeg",
+          "quality": 90
+        }
+      },
+      "id": "3d741d6b-a34e-4b1f-8464-c5cd4df0de4b",
+      "name": "E5. Convert to JPEG",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        4032,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('D2. After Create').first().json;\nconst files = $('E3. Flatten Files').all().map(i => i.json);\nconst dls = $('E4. Download File').all();\nconst items = $input.all();\nconst pdf = d.media_mode === 'carousel';\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const f = files[i] || { marker: true };\n  const it = items[i];\n  if (f.marker || !d.post_id) { out.push({ json: { skip: true, order: i } }); continue; }\n  let reason = '';\n  const dl = dls[i] && dls[i].binary && dls[i].binary.data;\n  const bin = it.binary && it.binary.data;\n  if (pdf) {\n    if (!dl || !bin || !/pdf|octet-stream/i.test(String(dl.mimeType || ''))) reason = 'Download from Drive failed for ' + f.name;\n  } else {\n    if (!dl || !String(dl.mimeType || '').startsWith('image/')) reason = 'Download from Drive failed for ' + f.name;\n    if (!reason && it.json && it.json.error) reason = 'JPEG conversion failed for ' + f.name + ': ' + (it.json.error.message || it.json.error);\n    if (!reason && !bin) reason = 'JPEG conversion returned no file for ' + f.name;\n    if (!reason && bin.mimeType !== 'image/jpeg') reason = f.name + ' is not JPEG after conversion (' + bin.mimeType + ')';\n  }\n  let b64 = '', bytes = 0, link = '';\n  if (!reason) {\n    const buf = await this.helpers.getBinaryDataBuffer(i, 'data');\n    bytes = buf.length;\n    if (bytes > 5 * 1024 * 1024) {\n      if (pdf) link = 'https://drive.google.com/uc?export=download&id=' + f.file_id;\n      else reason = f.name + ' is ' + (bytes / 1048576).toFixed(1) + ' MB as JPEG, over the 5 MB limit';\n    } else b64 = buf.toString('base64');\n  }\n  if (link) {\n    const mb = (bytes / 1048576).toFixed(1);\n    out.push({ json: { skip: true, linked: true, file_id: f.file_id, name: f.name, url: link,\n      note: 'carousel PDF ' + f.name + ' is ' + mb + ' MB (too large to attach): made public in Drive, link in Media_URLs',\n      note_private: 'carousel PDF ' + f.name + ' is ' + mb + ' MB (too large to attach): link in Media_URLs, but the file is NOT public',\n      order: i } });\n    continue;\n  }\n  const stem = String(f.name || ('slide_' + (i + 1))).replace(/\\.[^.]+$/, '');\n  const filename = stem + (pdf ? '.pdf' : '.jpg');\n  out.push({ json: reason\n    ? { skip: true, failed: true, reason, order: i }\n    : { skip: false, post_id: d.post_id, contentType: pdf ? 'application/pdf' : 'image/jpeg', filename, file: b64, bytes, order: i } });\n}\nreturn out;"
+      },
+      "id": "91bf09d5-afc0-4d3b-acdb-d7663d98ef73",
+      "name": "E6. Build Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4256,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.skip ? 'https://api.airtable.com/v0/meta/whoami' : 'https://content.airtable.com/v0/appsHn5Vfwdc9mWOh/' + $json.post_id + '/fldLqIce0QsDJeoTx/uploadAttachment' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.skip ? {} : { contentType: $json.contentType, file: $json.file, filename: $json.filename }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 150
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "7912c8e8-1c5e-48d1-9727-be70857a2863",
+      "name": "E7. Upload Attachment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4480,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('D2. After Create').first().json;\nconst e3 = $('E3. Flatten Files').first().json;\nconst ups = $('E6. Build Upload').all().map(i => i.json);\nconst res = $('E7. Upload Attachment').all().map(i => i.json || {});\nconst shares = $input.all().map(i => i.json || {});\nconst problems = [].concat(d.problems || [], e3.problems || []);\nconst src = $('D3. Mark Source Sent').first().json || {};\nconst msg = e => (e ? (typeof e === 'object' ? (e.message || e.type || JSON.stringify(e)) : String(e)) : 'no record returned');\nif (d.post_id && (src.error || !src.id)) problems.push('Source record was not set to Sent to Publishing: ' + msg(src.error));\nlet ok = 0;\nconst linked = [];\nups.forEach((u, i) => {\n  if (u.skip) {\n    if (u.failed) problems.push(u.reason);\n    if (u.linked) {\n      const s = shares[i] || {};\n      if (s.error || !s.id) {\n        problems.push('Could not make ' + u.name + ' public in Drive: ' + msg(s.error));\n        linked.push({ url: u.url, note: u.note_private });\n      } else linked.push({ url: u.url, note: u.note });\n    }\n    return;\n  }\n  const r = res[i] || {};\n  if (r.error || !r.id) problems.push('Airtable upload failed for ' + u.filename + ': ' + msg(r.error));\n  else ok++;\n});\nreturn [{ json: { ...d, media_ok: ok, media_urls: (e3.media_urls || []).concat(linked.map(u => u.url)), media_notes: linked.map(u => u.note), all_problems: problems } }];"
+      },
+      "id": "b90e3b99-4131-451f-b3ad-4a8027ce6d1d",
+      "name": "F1. Media Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $json.post_id || 'recNOPOST000000000' }}?returnFieldsByFieldId=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "7fa0b03e-7b97-4235-998a-0c851de01f38",
+      "name": "F2. Get Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4928,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('F1. Media Summary').first().json;\nconst r = $input.first().json || {};\nconst SEP = '==============================';\nconst TAG = 'IMPORT';\nconst prev = (r.fields && typeof r.fields.flda8ENrdb6WzoYFV === 'string') ? r.fields.flda8ENrdb6WzoYFV : '';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(SEP) + '\\\\n' + esc(TAG) + ' \\\\|[\\\\s\\\\S]*?(?=(\\\\n+' + esc(SEP) + '\\\\n)|$)', 'g');\nconst kept = prev.replace(re, '').trim();\nconst stamp = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' PHT';\nconst probs = d.all_problems || [];\nlet media;\nif (d.media_mode === 'video') media = 'Reel needs a public video link (PUB-7)';\nelse if (d.media_mode === 'none') media = 'none (text post)';\nelse if (d.media_mode === 'carousel') media = d.media_ok ? 'carousel PDF attached' : ((d.media_notes || []).length ? d.media_notes.join('; ') : 'none attached');\nelse media = d.media_ok ? d.media_ok + ' JPEG' + (d.media_ok > 1 ? 's' : '') + ' attached' : 'none attached';\nconst lines = [SEP, TAG + ' | ' + stamp,\n  'Result: ' + (probs.length ? 'Imported with issues for ' : 'Imported for ') + d.platforms.join(', '),\n  'Captions: ' + d.caption_labels.join('; ')];\nif (d.topic_label === 'generated') lines.push('Topic: generated');\nlines.push('Media: ' + media);\nif (probs.length) lines.push('Error: ' + probs.join('; '));\nlines.push('Next: ' + (probs.length ? 'fix the issues above, then approve' : (d.media_mode === 'video' ? 'add a public video link to Media_URLs (PUB-7), then approve' : \"waiting for Julia's approval\")));\nconst block = lines.join('\\n');\nconst cut = kept.indexOf(SEP);\nconst human = cut === -1 ? kept : kept.slice(0, cut).trim();\nconst others = cut === -1 ? '' : kept.slice(cut).trim();\nconst finalNotes = [human, block, others].filter(Boolean).join('\\n\\n');\nconst fields = { flda8ENrdb6WzoYFV: finalNotes };\nif (d.media_urls.length) fields.fldHtFl0ylOgBoTKK = d.media_urls.join('\\n');\nif (probs.length) fields.fldWqy7OCqcPHOVoC = 'IMPORT: ' + probs.join('; ');\nreturn [{ json: { ...d, update_body: { fields, typecast: true }, import_block: block } }];"
+      },
+      "id": "8dbaa031-2336-436d-9b9c-6c150ccfac40",
+      "name": "F3. Build Final Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5152,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $json.post_id || 'recNOPOST000000000' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.update_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "0bfb63a1-305a-4c1d-9306-8054be846208",
+      "name": "F4. Update Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5376,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('F3. Build Final Update').first().json;\nconst u = $input.first().json || {};\nconst probs = [].concat(d.all_problems || []);\nif (d.post_id && (u.error || !u.id)) {\n  const e = u.error;\n  probs.push('Could not write Notes/Media_URLs back: ' + (e ? (typeof e === 'object' ? (e.message || e.type) : String(e)) : 'no record returned'));\n}\nconst created = !!d.post_id;\nconst dup = !created && !!d.duplicate_of;\nconst detail = created\n  ? d.import_block.split('\\n').slice(2).join('\\n') + (probs.length > (d.all_problems || []).length ? '\\nError: ' + probs.slice((d.all_problems || []).length).join('; ') : '')\n  : (dup ? d.create_error : 'Post row was NOT created. Airtable said: ' + d.create_error) + '\\nSource: ' + d.source_record_url;\nconst fields = {\n  fldq6KrUxcx5OHQjv: (dup ? 'IMPORT skipped duplicate ' : 'IMPORT ') + (d.post_number ? '#' + d.post_number + ' ' : '') + d.brand + ' - ' + d.source_table + ' ' + d.source_record_id,\n  fld3Mm7NZ9wIFLiWb: (created || dup) ? 'Imported' : 'Error',\n  fldivVeGlqdUUKzEJ: ((created && !probs.length) || dup) ? 'OK' : 'Error',\n  fldxtKahKB1yoQpsu: detail,\n  fld1IcqfTKH2pG7Rw: new Date().toISOString()\n};\nif (created) fields.fldptSuLBobjarcWG = [d.post_id];\nif (dup) fields.fldptSuLBobjarcWG = [d.duplicate_of];\nreturn [{ json: { log_body: { records: [{ fields }], typecast: true } } }];"
+      },
+      "id": "938ed4a7-0968-4fb8-bb01-037aa24334fa",
+      "name": "F5. Build Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5600,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tblB3yuuTOVIM0tVX",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.log_body) }}",
+        "options": {}
+      },
+      "id": "69611210-4414-42e5-ba76-1b19ea2a3fff",
+      "name": "F6. Write Publish Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5824,
+        224
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "adacf1e1-a49c-4c96-ba56-6ca74c8eda50",
+      "name": "L. Post Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1792,
+        176
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "305eea5a-83ff-4174-b767-4748042b16e4",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = $('B1. Build Sources').all().map(i => i.json);\nconst existing = new Set($('A4. Load Existing Posts').all().map(i => String(i.json.Source_Record_ID || '').trim()).filter(Boolean));\nconst out = [];\nconst seenCfg = new Set();\n$input.all().forEach((it, i) => {\n  const s = sources[i] || {};\n  const r = it.json || {};\n  if (s.config_error) {\n    if (seenCfg.has(s.brand)) return;\n    seenCfg.add(s.brand);\n    out.push({ brand: s.brand, detail: s.config_error + (s.brand === 'webhook' ? '. Nothing was imported.' : '. Nothing was imported for this brand.') });\n    return;\n  }\n  if (r.error || !Array.isArray(r.records)) {\n    const e = r.error;\n    out.push({ brand: s.brand, detail: 'Could not search ' + s.source_table + ' in ' + s.base_id + ': ' + (e ? (typeof e === 'object' ? ((e.type ? e.type + ': ' : '') + (e.message || '')) : String(e)) : 'unexpected response') });\n    return;\n  }\n  if (s.record_id) {\n    if (!r.records.length) out.push({ brand: s.brand, title: 'IMPORT webhook not imported ' + s.brand + ' ' + s.record_id, detail: 'Webhook record ' + s.record_id + ' in ' + s.source_table + ' (' + s.base_id + ') was not imported: record not found, Status is not Final and Ready, or Scheduled_For is empty.' });\n    else if (existing.has(s.record_id)) out.push({ brand: s.brand, title: 'IMPORT webhook skipped ' + s.brand + ' ' + s.record_id, detail: 'Webhook record ' + s.record_id + ' in ' + s.source_table + ' (' + s.base_id + ') already has a Posts row; skipped.' });\n  }\n});\nif (!out.length) return [];\nreturn [{ json: { log_body: { typecast: true, records: out.slice(0, 10).map(o => ({ fields: {\n  fldq6KrUxcx5OHQjv: o.title || ('IMPORT source error ' + o.brand),\n  fld3Mm7NZ9wIFLiWb: 'Error',\n  fldivVeGlqdUUKzEJ: 'Error',\n  fldxtKahKB1yoQpsu: o.detail,\n  fld1IcqfTKH2pG7Rw: new Date().toISOString()\n} })) } } }];"
+      },
+      "id": "e9b757b7-ed9b-45dc-a010-4212698ab3e0",
+      "name": "S1. Source Errors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tblB3yuuTOVIM0tVX",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.log_body) }}",
+        "options": {}
+      },
+      "id": "a8eddfdb-2968-472d-a7a6-d1b796454584",
+      "name": "S2. Write Source Error Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1792,
+        368
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pub-import",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "3f2e8e4b-03cb-4b00-a7d6-db714f62cc68",
+      "name": "Webhook Pub Import",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "335694fd-1843-47ba-92d4-198f83309ff8",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Z6tZlprWp169MhI0",
+          "name": "X-Pub-Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "={{ $json.dup_filter }}"
+            },
+            {
+              "name": "pageSize",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "34e243e5-e134-4274-b17c-d6c8fb70039d",
+      "name": "D0. Recheck Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2576,
+        400
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.post_id ? 'https://api.airtable.com/v0/' + $json.source_base_id + '/tblSBKG2Zx2nZUPIT/' + $json.source_record_id : 'https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/recNOPOST000000000' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.post_id ? { fields: { Status: 'Sent to Publishing' } } : { fields: {} }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "3d13dad9-4e27-4dad-bd1d-b1628afa1b64",
+      "name": "D3. Mark Source Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3024,
+        400
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1a0b2c3-0001-4a00-8000-000000000001",
+              "leftValue": "={{ $('D2. After Create').first().json.media_mode }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "carousel"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "cca2bc31-cd53-4892-ac8f-98dc75259aca",
+      "name": "E4b. Is Carousel PDF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3920,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('E6. Build Upload').all()[$itemIndex].json.linked ? 'https://www.googleapis.com/drive/v3/files/' + $('E6. Build Upload').all()[$itemIndex].json.file_id + '/permissions?supportsAllDrives=true' : 'https://www.googleapis.com/drive/v3/files/NOFILE/permissions' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'reader', type: 'anyone' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "2a42ad67-cef3-471a-aee5-ab67d1888115",
+      "name": "E8. Share PDF Publicly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4592,
+        400
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "A1. Load Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A1. Load Brands": {
+      "main": [
+        [
+          {
+            "node": "A2. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A2. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "A3. Load Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A3. Load Accounts": {
+      "main": [
+        [
+          {
+            "node": "A4. Load Existing Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A4. Load Existing Posts": {
+      "main": [
+        [
+          {
+            "node": "B1. Build Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1. Build Sources": {
+      "main": [
+        [
+          {
+            "node": "B2. Search Source Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B2. Search Source Records": {
+      "main": [
+        [
+          {
+            "node": "B3. Build Candidates",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "S1. Source Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B3. Build Candidates": {
+      "main": [
+        [
+          {
+            "node": "L. Post Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C1. Build Caption Request": {
+      "main": [
+        [
+          {
+            "node": "C2. OpenAI Captions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C2. OpenAI Captions": {
+      "main": [
+        [
+          {
+            "node": "C3. Parse Captions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D1. Create Post": {
+      "main": [
+        [
+          {
+            "node": "D2. After Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E1. Media Refs": {
+      "main": [
+        [
+          {
+            "node": "E2. Drive Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E2. Drive Lookup": {
+      "main": [
+        [
+          {
+            "node": "E3. Flatten Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E3. Flatten Files": {
+      "main": [
+        [
+          {
+            "node": "E4. Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E5. Convert to JPEG": {
+      "main": [
+        [
+          {
+            "node": "E6. Build Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E6. Build Upload": {
+      "main": [
+        [
+          {
+            "node": "E7. Upload Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F1. Media Summary": {
+      "main": [
+        [
+          {
+            "node": "F2. Get Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F2. Get Post": {
+      "main": [
+        [
+          {
+            "node": "F3. Build Final Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F3. Build Final Update": {
+      "main": [
+        [
+          {
+            "node": "F4. Update Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F4. Update Post": {
+      "main": [
+        [
+          {
+            "node": "F5. Build Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F5. Build Log": {
+      "main": [
+        [
+          {
+            "node": "F6. Write Publish Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F6. Write Publish Log": {
+      "main": [
+        [
+          {
+            "node": "L. Post Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "L. Post Loop": {
+      "main": [
+        [
+          {
+            "node": "L. All Posts Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "C1. Build Caption Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "A1. Load Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S1. Source Errors": {
+      "main": [
+        [
+          {
+            "node": "S2. Write Source Error Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Pub Import": {
+      "main": [
+        [
+          {
+            "node": "A1. Load Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C3. Parse Captions": {
+      "main": [
+        [
+          {
+            "node": "D0. Recheck Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D0. Recheck Posts": {
+      "main": [
+        [
+          {
+            "node": "D1. Create Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D2. After Create": {
+      "main": [
+        [
+          {
+            "node": "D3. Mark Source Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D3. Mark Source Sent": {
+      "main": [
+        [
+          {
+            "node": "E1. Media Refs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E4. Download File": {
+      "main": [
+        [
+          {
+            "node": "E4b. Is Carousel PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E4b. Is Carousel PDF": {
+      "main": [
+        [
+          {
+            "node": "E6. Build Upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "E5. Convert to JPEG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E7. Upload Attachment": {
+      "main": [
+        [
+          {
+            "node": "E8. Share PDF Publicly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E8. Share PDF Publicly": {
+      "main": [
+        [
+          {
+            "node": "F1. Media Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timezone": "Asia/Manila",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  },
+  "versionId": "337cc4f2-a351-4e38-8bd1-2b14f236a91a",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "2wv3Xe0H0YDHpCsC",
+  "tags": []
+}

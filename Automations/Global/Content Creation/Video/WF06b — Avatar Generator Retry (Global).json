@@ -1,0 +1,1517 @@
+{
+  "name": "WF06b — Avatar Generator Retry (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "b87aa089-e079-428d-91fe-5195eafcca68",
+      "name": "1. Trigger: Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1696,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "{Status} = 'Video Processing'",
+        "options": {}
+      },
+      "id": "2f1968fe-f54a-4f5f-b99b-02aec30a5aff",
+      "name": "2. Get Video Processing Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        64
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "notes": "Finds all Reel Engine records in Video Processing status"
+    },
+    {
+      "parameters": {
+        "url": "https://api.heygen.com/v3/users/me",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "sk_V2_hgu_kM1YEl2YNnY_svqnMyzBZM56i9lmajIieZEAbuwBJFFN"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1783391f-6d96-4395-8b40-aab593f421ff",
+      "name": "2b. Check Credits Before Retry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-credits",
+              "leftValue": "={{ Number($input.item.json.data?.wallet?.remaining_balance ?? 0) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4eb1ff9e-c92b-47d6-abab-6e731692b00b",
+      "name": "2c. Skip If No Credits?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        96,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allRecords = $('2z. Attach Config').all();\nconst results = [];\n\nfor (const record of allRecords) {\n  const item = record.json;\n  const cfg = item.cfg || {};\n\n  let heygenVideoId = (item['HeyGen_Video_ID'] || '').trim();\n\n  if (!heygenVideoId) {\n    const notes = item['Reel_Notes'] || '';\n    const matchA = notes.match(/HeyGen Job ID:\\s*([\\w-]+)/);\n    const matchB = notes.match(/Job ID:\\s*([\\w-]+)/);\n    const matchC = notes.match(/([a-f0-9]{32,})/);\n    heygenVideoId = (matchA || matchB || matchC || [])[1] || '';\n  }\n\n  if (!heygenVideoId) {\n    results.push({ json: { skip: true, cfg: cfg, record_id: item.id, topic: item['Topic'] || '', reason: 'No HeyGen ID found' } });\n    continue;\n  }\n\n  results.push({ json: {\n    skip: false,\n    cfg: cfg,\n    record_id: item.id,\n    heygen_video_id: heygenVideoId,\n    topic: item['Topic'] || '',\n    platform: item['Platform'] || '',\n    content_type: item['Content Type'] || '',\n    priority_score: item['Priority_Score'] || 0\n  }});\n}\n\nif (!results.length) { return [{ json: { skip: true, cfg: {}, record_id: '', reason: 'No records in Video Processing' } }]; }\nreturn results;"
+      },
+      "id": "036a12ef-efe6-4b10-9fe1-d701576d0167",
+      "name": "3. Extract HeyGen Job ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        128
+      ],
+      "notes": "Parses the HeyGen Job ID from the HeyGen_Video_ID field or Reel_Notes fallback. Stale detection removed — HeyGen response is the source of truth."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5a91567d-43da-4deb-83cd-4f11fb640a52",
+      "name": "4. Has HeyGen ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        544,
+        128
+      ],
+      "notes": "Only proceeds if a valid HeyGen Job ID was found. Skips records with no ID."
+    },
+    {
+      "parameters": {
+        "url": "={{ (($json.cfg || {}).avatar || {}).status_url_template ? (($json.cfg || {}).avatar || {}).status_url_template.replace('{video_id}', $json.heygen_video_id) : 'https://api.heygen.com/v1/video_status.get?video_id=' + $json.heygen_video_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "sk_V2_hgu_kM1YEl2YNnY_svqnMyzBZM56i9lmajIieZEAbuwBJFFN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "01be8418-7148-45a8-9d93-605b3188cf1d",
+      "name": "5. Re-check HeyGen Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        768,
+        352
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Calls HeyGen API to get current render status for the job"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\n\n// Node 4 (Has HeyGen ID?) drops skip:true items before this node, so $itemIndex here\n// indexes the POST-filter subset. Rebuild that exact subset (skip===false) in order and\n// index into it. NEVER index into node 3's pre-filter array — that writes video URLs to\n// the wrong records.\nconst survivors = $('3. Extract HeyGen Job ID').all().filter(r => r.json && r.json.skip === false);\nconst sourceData = survivors[$itemIndex]?.json || {};\n\nif (!sourceData.record_id) {\n  return { json: { skip: true, cfg: sourceData.cfg || {}, is_complete: false, is_failed: false, reason: 'No matching source record at survivor index ' + $itemIndex } };\n}\n\n// Hard guard: HeyGen echoes the video id. If the source record has no id, or the echoed id\n// does not match it, write nothing — fall through as still-processing and re-poll next cycle.\nconst echoedId = response.data?.id || '';\nif (!sourceData.heygen_video_id || (echoedId && echoedId !== sourceData.heygen_video_id)) {\n  return { json: { skip: true, cfg: sourceData.cfg || {}, record_id: sourceData.record_id, heygen_video_id: sourceData.heygen_video_id || '', is_complete: false, is_failed: false, reason: 'HeyGen ID mismatch: response ' + echoedId + ' != source ' + (sourceData.heygen_video_id || '(none)') } };\n}\n\nconst isDataNull = response.data === null || response.data === undefined;\nconst status = isDataNull ? 'failed' : (response.data?.status || 'pending');\nconst videoUrl = response.data?.video_url || '';\n\n// Only trust HeyGen response — no stale detection based on record age\nconst isComplete = status === 'completed';\nconst isFailed = status === 'failed' || isDataNull;\n\nreturn { json: {\n  cfg: sourceData.cfg || {},\n  record_id: sourceData.record_id,\n  heygen_status: status,\n  video_url: videoUrl,\n  is_complete: isComplete,\n  is_failed: isFailed,\n  heygen_video_id: sourceData.heygen_video_id,\n  topic: sourceData.topic\n} };"
+      },
+      "id": "b9f7f020-3dc4-481f-b3ab-4a0ab33a2726",
+      "name": "6. Parse Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "AI_Video_URL": "={{ $json.drive_url }}",
+            "HeyGen_Video_ID": "={{ $json.heygen_video_id }}",
+            "Priority_Score": 0,
+            "Status": "Video Ready",
+            "id": "={{ $json.record_id }}",
+            "Reel_Notes": "={{ $json.reel_notes_final }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "7eb13478-13b7-4b01-a96c-a519266a5f93",
+      "name": "8a. Mark Video Ready",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        5024,
+        64
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "notes": "Video is done — saves URL and sets Status = Video Ready. Reel_Notes left untouched to preserve production brief."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "HeyGen_Video_ID": "={{ $json.heygen_video_id }}",
+            "Priority_Score": 0,
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Status": "Failed",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "27920252-e7bb-4d73-b2da-b3927ba5fef1",
+      "name": "8b. Mark HeyGen Error",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        5024,
+        352
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "notes": "HeyGen reported a failure — marks as Failed so team can review and re-submit"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "6d22b518-89f9-4220-87d4-33a8eb820396",
+      "name": "8c. Still Processing — Wait",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        5024,
+        544
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "notes": "Video is still rendering. No action needed — this workflow runs every 5 minutes and will check again automatically."
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "37a2b71b-b083-4ee6-830f-535d2175b922",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1472,
+        544
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Enabled}",
+        "options": {}
+      },
+      "id": "2314c831-f67a-4e2c-bee0-ac042f8f5bda",
+      "name": "0a2. Load Client Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1248,
+        544
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'avatar';\n\nfunction parseJson(raw, label) {\n  if (!raw) return {};\n  try {\n    const v = JSON.parse(raw);\n    if (v && typeof v === 'object' && !Array.isArray(v)) return v;\n    return {};\n  } catch (e) { console.log('[0b] Invalid Config_JSON on ' + label + ': ' + e.message); return {}; }\n}\n\nconst outputs = $input.all().map(i => i.json);\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outByKey = {};\nfor (const o of outputs) {\n  const key = (o['Key'] || '').trim().toLowerCase();\n  if (key) outByKey[key] = o;\n}\n\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  const o = outByKey[(name + '::' + OUTPUT_TYPE).toLowerCase()] || null;\n  const merged = { ...parseJson(c['Config_JSON'], name), ...parseJson(o ? o['Config_JSON'] : '', name + '::' + OUTPUT_TYPE) };\n  out.push({ json: {\n    ...merged,\n    client_name: name,\n    video_base_id: c['Video_Base_ID'],\n    brand_name: c['Brand_Name'] || name,\n    timezone: c['Timezone'] || 'Asia/Manila',\n    output_type: OUTPUT_TYPE,\n    drive_shared_drive_id: c['Drive_Shared_Drive_ID'] || '',\n    drive_folder_id: o ? (o['Drive_Folder_ID'] || '') : ''\n  } });\n}\nconsole.log('[0b] Clients to process: ' + out.length);\nreturn out;"
+      },
+      "id": "0f38a53d-5866-4340-afbb-fd855362cd77",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "45a202f9-f484-4993-a070-65a9dbe1df45",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -800,
+        544
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ba31423e-040c-4967-a356-55da6fc6a0c5",
+      "name": "0d. All Clients Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg, started_at: new Date().toISOString() } };"
+      },
+      "id": "9e4721fb-7746-4806-b60b-c30dc58e0ac3",
+      "name": "2z. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "3cfc1930-c6c3-4e1b-b190-b5aea3b60960",
+      "name": "8bz. Fetch Notes (Error)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4576,
+        352
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fresh = $input.item.json || {};\nconst d = $('6. Parse Status').item.json;\nconst a = (d.cfg || {}).avatar || {};\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\nconst sep = a.notes_separator || '==============================';\nconst TAG = a.stage_tag || 'AVATAR (WF06)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst base = freshNotes.replace(re, '').trim();\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('2z. Attach Config').first().json.started_at || '';\n  triggered = raw ? raw.substring(0, 16).replace('T', ' ') : '';\n  const s = Date.parse(raw);\n  if (s) { const secs = Math.max(0, Math.round((Date.now() - s) / 1000)); runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'; }\n} catch (e) {}\nconst jobId = d.heygen_video_id || '';\nconst tpl = a.task_url_template || 'https://app.heygen.com/videos/{video_id}';\nconst jobUrl = jobId ? String(tpl).replace('{video_id}', jobId) : '';\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + TAG + '\\nTriggered: ' + triggered + '\\nUpdated: ' + stamp + '\\nRun time: ' + runtime + '\\nStage: Error - HeyGen render failed' + '\\nHeyGen Job ID: ' + jobId + (jobUrl ? '\\nHeyGen Task URL: ' + jobUrl : '') + '\\nHeyGen status: ' + (d.heygen_status || '') + '\\nDetail: Re-submit manually.';\nreturn { json: { ...d, reel_notes_final: (base ? base + '\\n\\n' : '') + block } };"
+      },
+      "id": "70e0eaed-6503-4f58-bb34-dea9865789c9",
+      "name": "8by. Build Notes (Error)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "1955441f-e452-46bc-9a35-1e1c46f5f28e",
+      "name": "8cz. Fetch Notes (Waiting)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4576,
+        544
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fresh = $input.item.json || {};\nconst d = $('6. Parse Status').item.json;\nconst a = (d.cfg || {}).avatar || {};\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\nconst sep = a.notes_separator || '==============================';\nconst TAG = a.stage_tag || 'AVATAR (WF06)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst base = freshNotes.replace(re, '').trim();\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('2z. Attach Config').first().json.started_at || '';\n  triggered = raw ? raw.substring(0, 16).replace('T', ' ') : '';\n  const s = Date.parse(raw);\n  if (s) { const secs = Math.max(0, Math.round((Date.now() - s) / 1000)); runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'; }\n} catch (e) {}\nconst jobId = d.heygen_video_id || '';\nconst tpl = a.task_url_template || 'https://app.heygen.com/videos/{video_id}';\nconst jobUrl = jobId ? String(tpl).replace('{video_id}', jobId) : '';\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + TAG + '\\nTriggered: ' + triggered + '\\nUpdated: ' + stamp + '\\nRun time: ' + runtime + '\\nStage: Still rendering at HeyGen' + '\\nHeyGen Job ID: ' + jobId + (jobUrl ? '\\nHeyGen Task URL: ' + jobUrl : '') + '\\nHeyGen status: ' + (d.heygen_status || '');\nreturn { json: { ...d, reel_notes_final: (base ? base + '\\n\\n' : '') + block } };"
+      },
+      "id": "5bf93dfd-413b-4f32-bc7c-7f99c091dfb1",
+      "name": "8cy. Build Notes (Waiting)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "is-complete",
+                    "leftValue": "={{ $json.is_complete }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": true
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "complete"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "is-failed",
+                    "leftValue": "={{ $json.is_failed }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": true
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "failed"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "is-processing",
+                    "leftValue": "={{ $json.is_complete }}",
+                    "operator": {
+                      "operation": "false",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": true
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "processing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4bce9bb3-6894-4fe0-9051-03557d8e6713",
+      "name": "7. Status Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1216,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 6
+      },
+      "id": "6e1d3e15-2009-43d1-bba1-3bdaf0f23c91",
+      "name": "0e. Loop Return",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        5248,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const parsed = $input.item.json;\nconst cfg = parsed.cfg || {};\nconst recId = parsed.record_id || '';\nconst shortId = recId ? recId.substring(0, 7) : 'norec';\nlet slug = String(parsed.topic || '').toLowerCase().replace(/[^\\w\\s-]/g, '').replace(/\\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');\nif (slug.length > 40) { slug = slug.substring(0, 40); const cut = slug.lastIndexOf('-'); if (cut > 15) slug = slug.substring(0, cut); }\nslug = slug.replace(/^-|-$/g, '') || 'avatar';\nconst genDate = $now.setZone(cfg.timezone || 'Asia/Manila').toFormat('yyyy-MM-dd');\nconst folderName = genDate + '_' + slug + '_' + shortId;\nreturn { json: {\n  cfg: cfg,\n  record_id: recId,\n  video_url: parsed.video_url,\n  heygen_video_id: parsed.heygen_video_id,\n  topic: parsed.topic || '',\n  gen_date: genDate,\n  short_id: shortId,\n  folder_name: folderName,\n  file_name: folderName + '.mp4'\n}};"
+      },
+      "id": "9f510554-eb41-4b82-8604-88c66e815fa5",
+      "name": "7a. Restore Context for Drive",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.folder_name, mimeType: 'application/vnd.google-apps.folder', parents: [ (($json.cfg || {}).avatar || {}).drive_parent_folder_id || ($json.cfg || {}).drive_folder_id || '' ] }) }}",
+        "options": {}
+      },
+      "id": "6c0d5ab8-665c-4df1-9c39-d928a483379c",
+      "name": "7b. Create Drive Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2336,
+        64
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const subfolderResponse = $input.item.json;\nconst ctx = $('7a. Restore Context for Drive').item.json;\nreturn { json: {\n  cfg: ctx.cfg,\n  record_id: ctx.record_id,\n  video_url: ctx.video_url,\n  heygen_video_id: ctx.heygen_video_id,\n  topic: ctx.topic,\n  gen_date: ctx.gen_date,\n  file_name: ctx.file_name,\n  subfolder_id: subfolderResponse.id || ''\n}};"
+      },
+      "id": "2df4644b-b68a-4148-9bd7-dbb683ad340e",
+      "name": "7c. Preserve Subfolder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.video_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "f1024c5e-5ece-4d11-b861-bedf7bc209ab",
+      "name": "7d. Download HeyGen Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2784,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('7c. Preserve Subfolder ID').item.json.file_name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('7c. Preserve Subfolder ID').item.json.cfg.drive_shared_drive_id }}"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('7c. Preserve Subfolder ID').item.json.subfolder_id }}"
+        },
+        "options": {}
+      },
+      "id": "e4fb62b2-b49f-46d0-9d4c-4556f1d658bb",
+      "name": "7e. Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3008,
+        64
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const driveResponse = $input.item.json;\nconst ctx = $('7c. Preserve Subfolder ID').item.json;\nconst fileId = driveResponse.id || '';\nreturn { json: {\n  cfg: ctx.cfg,\n  record_id: ctx.record_id,\n  heygen_video_id: ctx.heygen_video_id,\n  drive_file_id: fileId,\n  drive_url: fileId ? `https://drive.google.com/file/d/${fileId}/view?usp=sharing` : ''\n}};"
+      },
+      "id": "b7a61931-aa93-443c-abca-6249883c2c4c",
+      "name": "7f. Extract Drive File ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3232,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://www.googleapis.com/drive/v3/files/' + $json.drive_file_id + '/permissions?supportsAllDrives=true' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"role\": \"reader\", \"type\": \"anyone\" }",
+        "options": {}
+      },
+      "id": "eda782d3-10c1-4ae6-8e90-c2970e8e3e48",
+      "name": "7g. Make Drive File Public",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3456,
+        64
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('7f. Extract Drive File ID').item.json;\nreturn { json: {\n  cfg: ctx.cfg,\n  record_id: ctx.record_id,\n  heygen_video_id: ctx.heygen_video_id,\n  drive_file_id: ctx.drive_file_id,\n  drive_url: ctx.drive_url\n}};"
+      },
+      "id": "f1708a9a-deb5-4c90-9dbc-f676c92ca1d4",
+      "name": "7h. Restore After Permission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3680,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "243ee5cb-a829-40d9-8746-0f7734082080",
+      "name": "7a2. Fetch Current Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1664,
+        64
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "notes": "Re-reads the record right before uploading. WF06 may have already completed this render and written the Drive URL while this retry run was in flight."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fresh = $input.item.json || {};\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst ctx = $('7a. Restore Context for Drive').item.json;\nconst status = (f['Status'] || '').toString();\nconst existingUrl = (f['AI_Video_URL'] || '').toString();\nconst alreadyDone = status === 'Video Ready' || existingUrl.indexOf('drive.google.com') !== -1;\nreturn { json: { ...ctx, already_done: alreadyDone, current_status: status, existing_video_url: existingUrl } };"
+      },
+      "id": "152b6598-7706-479c-80bc-d46e8ddbf2cb",
+      "name": "7a3. Guard Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "already-done",
+              "leftValue": "={{ $json.already_done }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "3a79c5c6-d19c-4f20-a022-ab7165c0ac7b",
+      "name": "7a4. Already Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        64
+      ],
+      "notes": "True = WF06 already uploaded and marked this record Video Ready. Skip to avoid a duplicate Drive folder and a second upload."
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "bf112d18-ba45-4337-9502-65cf3608a75c",
+      "name": "8az. Fetch Notes (Ready)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4576,
+        64
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fresh = $input.item.json || {};\nconst d = $('7h. Restore After Permission').item.json;\nconst a = (d.cfg || {}).avatar || {};\nlet parsed = {};\ntry { parsed = $('6. Parse Status').item.json; } catch (e) {}\n\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\nconst sep = a.notes_separator || '==============================';\nconst TAG = a.stage_tag || 'AVATAR (WF06)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst base = freshNotes.replace(re, '').trim();\n\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('2z. Attach Config').first().json.started_at || '';\n  triggered = raw ? raw.substring(0, 16).replace('T', ' ') : '';\n  const s = Date.parse(raw);\n  if (s) { const secs = Math.max(0, Math.round((Date.now() - s) / 1000)); runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'; }\n} catch (e) {}\n\nconst jobId = d.heygen_video_id || parsed.heygen_video_id || '';\nconst tpl = a.task_url_template || 'https://app.heygen.com/videos/{video_id}';\nconst jobUrl = jobId ? String(tpl).replace('{video_id}', jobId) : '';\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\n\n// HG-2: same completion notes as WF06 writes (ratio, estimated duration, edit placement), built from the live record.\nconst ratioRaw = f ? f.Ratio : '';\nconst ratio = (ratioRaw && typeof ratioRaw === 'object') ? (ratioRaw.name || '') : (ratioRaw || '');\nconst wpm = a.words_per_minute || 150;\nconst words = String((f && f.Script) || '').split(/\\s+/).filter(w => w.length > 0).length;\nconst estSecs = words > 0 ? Math.round(words / wpm * 60) : 0;\nconst mmss = (sec) => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');\nconst estLine = estSecs > 0 ? ('\\nEstimated duration: ' + mmss(estSecs) + ' (' + words + ' words at ' + wpm + ' wpm)') : '';\nconst placement = estSecs > 0 ? ('\\nEdit placement: base track, 0:00 - ' + mmss(estSecs)) : '\\nEdit placement: base track, starts at 0:00';\n\nconst block = sep + '\\n' + TAG\n  + '\\nTriggered: ' + triggered\n  + '\\nUpdated: ' + stamp\n  + '\\nRun time: ' + runtime\n  + '\\nStage: Complete'\n  + '\\nHeyGen Job ID: ' + jobId\n  + (jobUrl ? '\\nHeyGen Task URL: ' + jobUrl : '')\n  + (ratio ? '\\nRatio: ' + ratio : '')\n  + estLine\n  + placement\n  + '\\nDrive: ' + (d.drive_url || '');\n\nreturn { json: { ...d, reel_notes_final: (base ? base + '\\n\\n' : '') + block } };"
+      },
+      "id": "626d182e-71a3-4083-b376-5b82f4a4ddc7",
+      "name": "8ay. Build Notes (Ready)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\nconst ctx = $('7c. Preserve Subfolder ID').item.json;\nconst cfg = d.cfg || {};\nconst a = cfg.avatar || {};\nconst B = 'alfredaiNoteBoundary';\nconst TABLE_ID = 'tblSBKG2Zx2nZUPIT';\nconst baseId = cfg.video_base_id || '';\nconst recId = d.record_id || '';\nconst atUrl = (baseId && recId) ? ('https://airtable.com/' + baseId + '/' + TABLE_ID + '/' + recId) : '';\nconst brand = cfg.brand_name || cfg.client_name || '';\nconst tzLabel = ((cfg.timezone || 'Asia/Manila').split('/')[1] || 'PHT');\nconst jobId = ctx.heygen_video_id || '';\nconst tpl = a.task_url_template || 'https://app.heygen.com/videos/{video_id}';\nconst jobUrl = jobId ? String(tpl).replace('{video_id}', jobId) : '';\nconst lines = [\nbrand + ' Content Engine - generated asset folder',\n'',\n'Brand: ' + brand,\n'Content type: Avatar video (HeyGen)',\n'Generated: ' + (ctx.gen_date || '') + ' (' + tzLabel + ')',\n'Topic: ' + (ctx.topic || ''),\n'',\n'Airtable record ID: ' + recId,\n'Airtable record: ' + atUrl,\n'Airtable base: ' + baseId,\n'',\n'File: ' + (ctx.file_name || ''),\n'Drive file: ' + (d.drive_url || ''),\n'HeyGen job ID: ' + jobId,\n'HeyGen task URL: ' + jobUrl,\n'',\n'Recovered by the WF06b retry workflow. This is the base track of the edit.',\n'Posted vs not-posted is tracked manually in Outputs > Posted / Pending.'\n];\nconst note = lines.join('\\n');\nconst meta = JSON.stringify({ name: '00_INFO.txt', parents: [ctx.subfolder_id], mimeType: 'text/plain' });\nconst multipart = '--' + B + '\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n' + meta + '\\r\\n--' + B + '\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n' + note + '\\r\\n--' + B + '--';\nreturn { json: { ...d, note_multipart: multipart } };"
+      },
+      "id": "265eb3fb-fa54-4ec2-8a3f-03b158c7bf8d",
+      "name": "7i. Build Folder Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3904,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "multipart/related; boundary=alfredaiNoteBoundary",
+        "body": "={{ $json.note_multipart }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "56bb9c08-98c6-4918-a371-678aba645e65",
+      "name": "7j. Write Folder Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        4128,
+        64
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('7h. Restore After Permission').item.json;\nreturn { json: { ...ctx } };"
+      },
+      "id": "5a61e3c1-fa74-4095-bc50-fd6910c0301e",
+      "name": "7k. Restore After Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4352,
+        64
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2b. Check Credits Before Retry": {
+      "main": [
+        [
+          {
+            "node": "2c. Skip If No Credits?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Skip If No Credits?": {
+      "main": [
+        [
+          {
+            "node": "3. Extract HeyGen Job ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Extract HeyGen Job ID": {
+      "main": [
+        [
+          {
+            "node": "4. Has HeyGen ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Has HeyGen ID?": {
+      "main": [
+        [
+          {
+            "node": "5. Re-check HeyGen Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "5. Re-check HeyGen Status": {
+      "main": [
+        [
+          {
+            "node": "6. Parse Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Trigger: Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0a2. Load Client Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a2. Load Client Outputs": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "0d. All Clients Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2. Get Video Processing Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Get Video Processing Records": {
+      "main": [
+        [
+          {
+            "node": "2z. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2z. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "2b. Check Credits Before Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8bz. Fetch Notes (Error)": {
+      "main": [
+        [
+          {
+            "node": "8by. Build Notes (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8by. Build Notes (Error)": {
+      "main": [
+        [
+          {
+            "node": "8b. Mark HeyGen Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8cz. Fetch Notes (Waiting)": {
+      "main": [
+        [
+          {
+            "node": "8cy. Build Notes (Waiting)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8cy. Build Notes (Waiting)": {
+      "main": [
+        [
+          {
+            "node": "8c. Still Processing — Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Parse Status": {
+      "main": [
+        [
+          {
+            "node": "7. Status Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Status Switch": {
+      "main": [
+        [
+          {
+            "node": "7a. Restore Context for Drive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8bz. Fetch Notes (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8cz. Fetch Notes (Waiting)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8a. Mark Video Ready": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "8b. Mark HeyGen Error": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "8c. Still Processing — Wait": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "0e. Loop Return": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7b. Create Drive Subfolder": {
+      "main": [
+        [
+          {
+            "node": "7c. Preserve Subfolder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7c. Preserve Subfolder ID": {
+      "main": [
+        [
+          {
+            "node": "7d. Download HeyGen Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7d. Download HeyGen Video": {
+      "main": [
+        [
+          {
+            "node": "7e. Upload to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7e. Upload to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "7f. Extract Drive File ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7f. Extract Drive File ID": {
+      "main": [
+        [
+          {
+            "node": "7g. Make Drive File Public",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7g. Make Drive File Public": {
+      "main": [
+        [
+          {
+            "node": "7h. Restore After Permission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a. Restore Context for Drive": {
+      "main": [
+        [
+          {
+            "node": "7a2. Fetch Current Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a2. Fetch Current Record": {
+      "main": [
+        [
+          {
+            "node": "7a3. Guard Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a3. Guard Context": {
+      "main": [
+        [
+          {
+            "node": "7a4. Already Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a4. Already Completed?": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 5
+          }
+        ],
+        [
+          {
+            "node": "7b. Create Drive Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8az. Fetch Notes (Ready)": {
+      "main": [
+        [
+          {
+            "node": "8ay. Build Notes (Ready)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8ay. Build Notes (Ready)": {
+      "main": [
+        [
+          {
+            "node": "8a. Mark Video Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7h. Restore After Permission": {
+      "main": [
+        [
+          {
+            "node": "7i. Build Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7i. Build Folder Note": {
+      "main": [
+        [
+          {
+            "node": "7j. Write Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7j. Write Folder Note": {
+      "main": [
+        [
+          {
+            "node": "7k. Restore After Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7k. Restore After Note": {
+      "main": [
+        [
+          {
+            "node": "8az. Fetch Notes (Ready)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "d86bab18-9e68-4147-860c-d94392940fd6",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "Py4aA3K5vQzQ5jXW",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

@@ -1,0 +1,2290 @@
+{
+  "name": "WF00e - Smart Source Radar Resolver (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "900e3556-e555-47af-8ceb-4be000d346a3",
+      "name": "1. Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        31872,
+        2800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "filterByFormula": "AND(OR(NOT({YouTube_Links} = ''), NOT({TikTok_Links} = ''), NOT({Instagram_Links} = '')), {Status} = 'Active', OR({Source Name} = '', {Platform} = '', {Category} = '', AND(NOT({TikTok_Links} = ''), {TikTok_Handle} = ''), AND(NOT({Instagram_Links} = ''), {Instagram_Handle} = '')))",
+        "options": {}
+      },
+      "id": "8f0d44c3-71d9-4355-a2c7-a9416fe6a1c7",
+      "name": "1c. Get Unresolved Links",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        32768,
+        2080
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "filterByFormula": "AND(NOT({Video_Links} = ''), {Status} = 'Active', OR({Video_Links_Processed} = FALSE(), NOT({Viral Library}), NOT({Reel Engine})))",
+        "options": {}
+      },
+      "id": "8530c618-9486-491d-a15a-b7c080c4346a",
+      "name": "1d. Get Unresolved Video Links",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        32768,
+        2752
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nconst item = $input.item.json;\nconst recordId = item.id || '';\nconst rawUrl   = item['YouTube_Links'] || item['TikTok_Links'] || item['Instagram_Links'] || '';\nfunction normalizeUrl(url) {\n  let clean = url.split('?')[0].replace(/\\/$/, '');\n  clean = clean.replace('/reel/', '/reels/');\n  return clean;\n}\nconst url = normalizeUrl(rawUrl);\nconst getSS = (v) => (v && typeof v === 'object' ? v.name : v) || '';\nconst existing = {\n  sourceName:    item['Source Name']          || '',\n  platform:      item['Platform']             || '',\n  category:      getSS(item['Category']),\n  sourceType:    getSS(item['Source Type']),\n  primaryFocus:  item['Primary Focus']        || '',\n  igHandle:      item['Instagram_Handle']     || '',\n  ttHandle:      item['TikTok_Handle']        || '',\n  ytChannelId:   item['YouTube Channel ID']   || '',\n  ytChannelName: item['YouTube Channel Name'] || '',\n  status:        getSS(item['Status']),\n};\nlet platform = '', identifier = '', identifierType = '';\nif (url.includes('youtube.com') || url.includes('youtu.be')) {\n  platform = 'YouTube';\n  if (url.includes('/channel/'))  { identifier = url.split('/channel/')[1].split('/')[0].split('?')[0]; identifierType = 'channel_id'; }\n  else if (url.includes('/@'))    { identifier = url.split('/@')[1].split('/')[0].split('?')[0]; identifierType = 'handle'; }\n  else if (url.includes('/c/'))   { identifier = url.split('/c/')[1].split('/')[0]; identifierType = 'handle'; }\n  else if (url.includes('/user/')){ identifier = url.split('/user/')[1].split('/')[0]; identifierType = 'handle'; }\n} else if (url.includes('instagram.com') || url.includes('instagr.am')) {\n  platform = 'Instagram';\n  identifier = url.split('instagram.com/')[1]?.replace('@','').split('/')[0].split('?')[0] || '';\n  identifierType = 'handle';\n} else if (url.includes('tiktok.com')) {\n  platform = 'TikTok';\n  if (url.includes('/@')) { identifier = url.split('/@')[1].split('/')[0].split('?')[0]; }\n  else { identifier = url.split('tiktok.com/')[1]?.replace('@','').split('/')[0] || ''; }\n  identifierType = 'handle';\n}\nif (!platform || !identifier) return { json: { skip: true, recordId, reason: 'Cannot detect platform from: ' + url } };\nreturn { json: { skip: false, recordId, platform, identifier, identifierType, url, existing } };\n"
+      },
+      "id": "c824403c-a67d-4769-9b7c-472ae111e2ca",
+      "name": "3a. Parse Links URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        33664,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nconst item = $input.item.json;\nconst recordId = item.id || '';\nconst rawUrl   = item['Video_Links'] || '';\nfunction normalizeUrl(url) {\n  if (url.includes('youtube.com/watch')) return url.trim().replace(/\\/+$/, '');\n  let clean = url.split('?')[0].replace(/\\/$/, '');\n  clean = clean.replace('/reel/', '/reels/');\n  return clean;\n}\nconst url = normalizeUrl(rawUrl);\nlet platform = '', identifier = '', identifierType = '';\nif (url.includes('youtube.com') || url.includes('youtu.be')) {\n  platform = 'YouTube';\n  if (rawUrl.includes('watch?v='))  { identifier = rawUrl.split('watch?v=')[1].split('&')[0]; identifierType = 'video'; }\n  else if (url.includes('shorts/'))   { identifier = url.split('shorts/')[1].split('?')[0]; identifierType = 'video'; }\n  else if (url.includes('youtu.be/')){ identifier = url.split('youtu.be/')[1].split('?')[0]; identifierType = 'video'; }\n} else if (url.includes('instagram.com')) {\n  platform = 'Instagram';\n  const match = url.match(/\\/(reels?|p|tv)\\/([^/?]+)/);\n  identifier = match ? match[2] : '';\n  identifierType = 'post';\n} else if (url.includes('tiktok.com')) {\n  platform = 'TikTok';\n  if (url.includes('/video/')) { identifier = url.split('/video/')[1].split('?')[0]; identifierType = 'video'; }\n}\nif (!platform || !identifier) return { json: { skip: true, recordId, reason: 'Cannot detect platform or video ID from: ' + url } };\nreturn { json: { skip: false, recordId, platform, identifier, identifierType, url, rawUrl } };\n"
+      },
+      "id": "ef3121d8-51b0-4d5e-bcb2-d5e69255b62c",
+      "name": "3b. Parse Video Links URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        33664,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "sg",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4333dbe-459d-4201-8e78-f1002138ab7d",
+      "name": "3a. Can Resolve Link?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        33888,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "vg",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "db60196e-464e-4a0c-914b-65750db14470",
+      "name": "3b. Can Resolve Video?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        33888,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nconst d = $input.item.json;\nconst { platform, identifier, identifierType } = d;\nconst SUPADATA_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6IjEifQ.eyJpc3MiOiJuYWRsZXMiLCJpYXQiOiIxNzQxNjk3Mzg2IiwicHVycG9zZSI6ImFwaV9hdXRoZW50aWNhdGlvbiIsInN1YiI6IjJmNDc1Yzg0OTBjNzQ0ZGNhMTJjODA3MzY3YzEzNTg1In0.th5iol8OEe8_Wkda7ENeG2WX_W7BnohBfGDb0_2v2SI';\nconst YT_API_KEY   = 'AIzaSyCiu4jOmy7kvNLMU9KAFcHhIW8ZVfB4OkQ';\nlet metadata = {};\ntry {\n  if (platform === 'YouTube') {\n    if (identifierType === 'channel_id') {\n      const res = await this.helpers.httpRequest({ method: 'GET', json: true,\n        url: `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${identifier}&key=${YT_API_KEY}` });\n      metadata = { channelId: identifier, channelTitle: res.items?.[0]?.snippet?.title || '', description: res.items?.[0]?.snippet?.description || '' };\n    } else {\n      const s = await this.helpers.httpRequest({ method: 'GET', json: true,\n        url: `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(identifier)}&type=channel&key=${YT_API_KEY}` });\n      const chId = s.items?.[0]?.snippet?.channelId || '';\n      if (chId) {\n        const c = await this.helpers.httpRequest({ method: 'GET', json: true,\n          url: `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${chId}&key=${YT_API_KEY}` });\n        metadata = { channelId: chId, channelTitle: c.items?.[0]?.snippet?.title || '', description: c.items?.[0]?.snippet?.description || '' };\n      }\n    }\n  } else if (platform === 'Instagram') {\n    const res = await this.helpers.httpRequest({ method: 'GET', json: true,\n      url: `https://api.supadata.ai/v1/instagram/user?username=${encodeURIComponent(identifier)}`,\n      headers: { 'x-api-key': SUPADATA_KEY } });\n    metadata = res;\n  } else if (platform === 'TikTok') {\n    const res = await this.helpers.httpRequest({ method: 'GET', json: true,\n      url: `https://api.supadata.ai/v1/tiktok/user?username=${encodeURIComponent(identifier)}`,\n      headers: { 'x-api-key': SUPADATA_KEY } });\n    metadata = res;\n  }\n} catch(e) { metadata = { error: e.message }; }\nreturn { json: { ...d, metadata } };\n"
+      },
+      "id": "c4ffbce1-90b4-4954-a041-009a94c79a0f",
+      "name": "4a. Fetch Profile Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        34112,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "yt-rule",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "YouTube",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "tt-rule",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "TikTok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ig-rule",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "Instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5103be31-6cca-4e00-ac36-c92e8be9fbdf",
+      "name": "4b-route. Platform Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        34112,
+        2736
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\nconst { identifier } = d;\nconst YT_API_KEY = 'AIzaSyCiu4jOmy7kvNLMU9KAFcHhIW8ZVfB4OkQ';\nlet metadata = {};\nlet authorHandle = '';\ntry {\n  const vRes = await this.helpers.httpRequest({ method: 'GET', json: true,\n    url: `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${identifier}&key=${YT_API_KEY}` });\n\n  // YouTube quota error comes back as 200 with an error object, or 403\n  if (vRes.error) {\n    const code = vRes.error.code || 0;\n    const msg  = vRes.error.message || JSON.stringify(vRes.error);\n    const isQuota = code === 403 || String(msg).toLowerCase().includes('quota');\n    console.log('[WF00e 4b-yt] API error:', code, msg);\n    return { json: { ...d, metadata: null, authorHandle: '', _error: isQuota ? 'rate_limit' : 'api_error', _errorMsg: msg } };\n  }\n\n  const v = vRes.items?.[0];\n  if (!v) {\n    return { json: { ...d, metadata: { title: d.rawUrl || d.url || '', error: 'not_found' }, authorHandle: '', _error: '' } };\n  }\n\n  const dur = v.contentDetails?.duration || 'PT0S';\n  const m = dur.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/);\n  const durationSeconds = m ? (parseInt(m[1]||0)*3600)+(parseInt(m[2]||0)*60)+parseInt(m[3]||0) : 0;\n  authorHandle = v.snippet?.channelId || '';\n  metadata = {\n    title:          v.snippet?.title         || '',\n    channelId:      v.snippet?.channelId     || '',\n    channelTitle:   v.snippet?.channelTitle  || '',\n    description:    v.snippet?.description   || '',\n    publishedAt:    v.snippet?.publishedAt   || '',\n    viewCount:      parseInt(v.statistics?.viewCount    || 0),\n    likeCount:      parseInt(v.statistics?.likeCount    || 0),\n    commentCount:   parseInt(v.statistics?.commentCount || 0),\n    durationSeconds,\n    tags: Array.isArray(v.snippet?.tags) ? v.snippet.tags.join(', ') : ''\n  };\n} catch(e) {\n  console.log('[WF00e 4b-yt] exception:', e.message);\n  return { json: { ...d, metadata: null, authorHandle: '', _error: 'api_error', _errorMsg: e.message } };\n}\nreturn { json: { ...d, metadata, authorHandle, _error: '' } };"
+      },
+      "id": "e2fa9c87-65fe-45fe-86b9-acb1adc20ad6",
+      "name": "4b-yt. Fetch YouTube Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        34336,
+        2560
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.supadata.ai/v1/metadata",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $('3b. Parse Video Links URL').item.json.rawUrl || $('3b. Parse Video Links URL').item.json.url }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "da0804cb-882c-4b05-944e-e2aacfc015f7",
+      "name": "4b-ig. Fetch Instagram Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        34336,
+        2752
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L01j4MGWxdfH53sL",
+          "name": "SUPADATA"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://api.supadata.ai/v1/metadata",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $('3b. Parse Video Links URL').item.json.rawUrl || $('3b. Parse Video Links URL').item.json.url }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "9cba8603-ca8a-4cf3-a873-1b7fb724c2e8",
+      "name": "4b-ti. Fetch TikTok Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        34336,
+        2944
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L01j4MGWxdfH53sL",
+          "name": "SUPADATA"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\nconst d = $('3b. Parse Video Links URL').item.json;\nconst rawUrl = d.rawUrl || d.url || '';\nconst platform = d.platform || '';\nlet metadata = {};\nlet authorHandle = '';\n\nif (platform === 'YouTube') {\n  if (response._error) {\n    return { json: { ...d, metadata: null, authorHandle: '', _error: response._error, _errorMsg: response._errorMsg || '' } };\n  }\n  metadata = response.metadata || {};\n  authorHandle = response.authorHandle || '';\n} else {\n  const metaRes = response;\n  console.log('[WF00e 4b] platform:', platform, '| keys:', Object.keys(metaRes || {}).join(', '));\n  console.log('[WF00e 4b] full:', JSON.stringify(metaRes).substring(0, 2000));\n\n  // Rate limit / API error guard\n  const statusCode = metaRes.statusCode || metaRes.status || 0;\n  const errorMsg = metaRes.error || metaRes.message || '';\n  const isRateLimit = statusCode === 429 || String(errorMsg).toLowerCase().includes('rate limit') || String(errorMsg).toLowerCase().includes('quota') || String(errorMsg).toLowerCase().includes('limit exceeded');\n  const isApiError = statusCode >= 400 || !!metaRes.error;\n\n  if (isRateLimit) {\n    console.log('[WF00e 4b] RATE LIMIT — aborting, will not create any records');\n    return { json: { ...d, metadata: null, authorHandle: '', _error: 'rate_limit', _errorMsg: String(errorMsg) || 'Rate limit exceeded' } };\n  }\n  if (isApiError) {\n    console.log('[WF00e 4b] API ERROR —', statusCode, errorMsg, '— aborting');\n    return { json: { ...d, metadata: null, authorHandle: '', _error: 'api_error', _errorMsg: String(errorMsg) || String(statusCode) } };\n  }\n\n  const author = metaRes.author || {};\n  authorHandle = author.username || author.uniqueId || author.handle || '';\n  if (!authorHandle && rawUrl.includes('/@')) {\n    authorHandle = rawUrl.split('/@')[1].split('/')[0].split('?')[0];\n  }\n  if (!authorHandle && platform === 'Instagram') {\n    const parts = rawUrl.split('instagram.com/')[1] || '';\n    const possible = parts.split('/')[0];\n    if (possible && !['reel','reels','p','tv','stories','explore'].includes(possible)) authorHandle = possible;\n  }\n\n  const stats = metaRes.stats || {};\n  console.log('[WF00e 4b] stats:', JSON.stringify(stats));\n  const viewCount    = (stats.views    != null) ? parseInt(stats.views)    : 0;\n  const likeCount    = (stats.likes    != null) ? parseInt(stats.likes)    : 0;\n  const commentCount = (stats.comments != null) ? parseInt(stats.comments) : 0;\n\n  const media = metaRes.media || {};\n  const durationSeconds = (media.duration != null) ? parseInt(media.duration) : 0;\n  const publishedAt = metaRes.createdAt || '';\n\n  let tags = '';\n  if (Array.isArray(metaRes.tags)) tags = metaRes.tags.join(', ');\n  else if (metaRes.tags) tags = String(metaRes.tags);\n\n  console.log('[WF00e 4b] PARSED — views:', viewCount, 'likes:', likeCount,\n              'comments:', commentCount, 'duration:', durationSeconds,\n              'handle:', authorHandle, 'title:', (metaRes.title||'').substring(0,80));\n\n  metadata = {\n    title:          metaRes.title || metaRes.description || '',\n    description:    metaRes.description || '',\n    authorHandle,\n    channelTitle:   author.displayName || author.name || author.nickname || authorHandle || '',\n    viewCount, likeCount, commentCount, durationSeconds, publishedAt, tags\n  };\n  if (!metadata.title) metadata.title = rawUrl;\n}\nreturn { json: { ...d, metadata, authorHandle, _error: '' } };"
+      },
+      "id": "74560ce4-bb07-47f7-99c3-3206d71881d1",
+      "name": "4b. Fetch Video Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        34560,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "no-error",
+              "leftValue": "={{ $json._error || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8062e44f-858e-48bc-99e3-ca5d1ad616fb",
+      "name": "4b-check. Error Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        34784,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED_OPENAI"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"gpt-4.1-mini\",\n  max_tokens: 600,\n  temperature: 0.2,\n  messages: [\n    {\n      role: \"system\",\n      content: \"You are a content intelligence assistant. Fill in source fields based on social media profile metadata.\\n\\nRULES:\\n- source_name: Full proper display name with correct capitalization and spacing. Extract from full_name, nickname, or channelTitle. Convert usernames to readable names (e.g. 'rowancheung' = 'Rowan Cheung', 'nicksaraev' = 'Nick Saraev'). NEVER return 'unknown' or empty.\\n- category: MUST be one of: Tech, Business, News, Education, Entertainment, Health, Lifestyle, Other, Viral Pattern Source, Topic & News Source. Tech = AI/software/gadgets. Business = entrepreneurship/marketing/finance. News = current events. Education = tutorials/learning. Entertainment = comedy/reactions. Health = fitness/wellness. Lifestyle = productivity/travel/career.\\n- primary_focus: 1 sentence describing what this creator covers. Infer from bio/description/username if needed.\\n- source_type: MUST be one of: YouTube, Instagram, TikTok, Website, Podcast, Newsletter, Social Media, Other.\\n- tiktok_handle: Extract from bio/description if mentioned (e.g. 'Follow me on TikTok @xxx'). Return with @ prefix. Empty string if not found.\\n- instagram_handle: Extract from bio/description if mentioned. Return with @ prefix. Empty string if not found.\\n- youtube_channel_id: Only if mentioned. Empty string if not found.\\n\\nRespond ONLY in valid JSON. No markdown.\"\n    },\n    {\n      role: \"user\",\n      content: \"Platform: \" + $json.platform + \"\\nURL: \" + $json.url + \"\\nHandle/Identifier: \" + $json.identifier + \"\\nMetadata: \" + JSON.stringify($json.metadata).substring(0, 2000)\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "b935e3f1-7e78-4376-91c9-dbc01f4e9948",
+      "name": "5a. AI Fill Source Radar Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        34336,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\nconst { platform, identifier, url: rawUrl, metadata, authorHandle, recordId } = d;\nconst ctx = $('1d3. Pick First Video').first().json;\nconst cfg = ctx.cfg || {};\nconst BASE = cfg.video_base_id;\nif (!BASE) { throw new Error('Client config missing: no video_base_id on the Video branch.'); }\nconst AT_PAT = 'REDACTED_AIRTABLE';\n\nfunction normalizeUrl(u) {\n  if (!u) return '';\n  if (u.includes('youtube.com/watch')) return u.trim().replace(/\\/+$/, '');\n  let s = u.trim().replace(/\\/+$/, '');\n  s = s.replace(/instagram\\.com\\/reel\\//, 'instagram.com/reels/');\n  return s;\n}\n\nconst url = normalizeUrl(rawUrl);\nconst item = ctx;\nconst existingSourceName  = item['Source Name']    || '';\nconst existingPlatform    = item['Platform']        || '';\nconst existingIgHandle    = item['Instagram_Handle']|| '';\nconst existingTtHandle    = item['TikTok_Handle']   || '';\nconst getSS = (v) => (v && typeof v === 'object') ? (v.name || '') : (v || '');\nconst existingCategory    = getSS(item['Category']);\nconst existingStatus      = getSS(item['Status']);\nconst existingSourceType  = getSS(item['Source Type']);\nconst alreadyProcessed    = !!item['Video_Links_Processed'];\n\nlet existingVLId = '', existingViralId = '', existingReelId = '';\ntry {\n  if (identifier) {\n    const f = encodeURIComponent(`{Video ID}=\"${identifier}\"`);\n    const r = await this.helpers.httpRequest({ method: 'GET', json: true,\n      url: `https://api.airtable.com/v0/${BASE}/tblWBISPAy99YtoPw?filterByFormula=${f}`,\n      headers: { Authorization: `Bearer ${AT_PAT}` } });\n    if ((r.records||[]).length > 0) existingVLId = r.records[0].id;\n  }\n  const f2 = encodeURIComponent(`{URL}=\"${url}\"`);\n  const r2 = await this.helpers.httpRequest({ method: 'GET', json: true,\n    url: `https://api.airtable.com/v0/${BASE}/tbl12IsF6vUdPY60r?filterByFormula=${f2}`,\n    headers: { Authorization: `Bearer ${AT_PAT}` } });\n  if ((r2.records||[]).length > 0) existingViralId = r2.records[0].id;\n  const f3 = encodeURIComponent(`{Source URL}=\"${url}\"`);\n  const r3 = await this.helpers.httpRequest({ method: 'GET', json: true,\n    url: `https://api.airtable.com/v0/${BASE}/tblSBKG2Zx2nZUPIT?filterByFormula=${f3}`,\n    headers: { Authorization: `Bearer ${AT_PAT}` } });\n  if ((r3.records||[]).length > 0) existingReelId = r3.records[0].id;\n} catch(e) { console.log('Pre-check error:', e.message); }\n\nconst needsVideoLib   = !existingVLId;\nconst needsViralLib   = !existingViralId;\nconst needsReelEngine = !existingReelId;\n\nconst VALID_CATEGORIES = ['News', 'Education', 'Product'];\nlet inferredCategory = VALID_CATEGORIES.includes(existingCategory) ? existingCategory : '';\nif (!inferredCategory) {\n  const t = (metadata.title || metadata.description || '').toLowerCase();\n  const edu = ['how to','full course','beginner','masterclass','tutorial','guide','explained','learn ','lessons','levels of',' tips','skills','stop using',\"here's the fix\",'step by step','complete guide','from scratch','for beginners','crash course','deep dive','walkthrough','how i use','how i build','setup'];\n  const prod = ['product intro','product demo','product launch','product review','unboxing','hands on','first look'];\n  if (edu.some(kw => t.includes(kw))) inferredCategory = 'Education';\n  else if (prod.some(kw => t.includes(kw))) inferredCategory = 'Product';\n  else inferredCategory = 'News';\n}\n\nlet contentType = 'Video';\nif (platform === 'TikTok')                                                   contentType = 'TikTok';\nelse if (platform === 'Instagram')                                           contentType = 'Reel';\nelse if (platform === 'YouTube' && (metadata.durationSeconds || 0) <= 60)   contentType = 'Short';\n\nfunction toTitleCase(str) {\n  if (!str) return '';\n  let s = str.trim();\n  if (!s.includes(' ')) s = s.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/([a-zA-Z])([0-9])/g,'$1 $2');\n  return s.toLowerCase().split(/\\s+/).filter(w=>w.length>0).map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');\n}\n\nconst author       = metadata.author || metadata.creator || metadata.user || {};\nconst rawName      = metadata.channelTitle || author.name || author.displayName || author.nickname || metadata.full_name || metadata.name || '';\nconst sourceName   = existingSourceName || toTitleCase(rawName) || toTitleCase((authorHandle||'').replace(/^@/,'')) || '';\nconst channelId    = metadata.channelId || '';\nconst rawHandle    = authorHandle || metadata.uniqueId || metadata.username || author.username || metadata.owner?.username || '';\nconst creatorHandle = rawHandle ? '@' + rawHandle.replace(/^@/,'') : '';\nconst title        = (metadata.title || metadata.desc || metadata.description || url).substring(0,200);\nlet tags = '';\nif (Array.isArray(metadata.tags))          tags = metadata.tags.join(', ');\nelse if (metadata.tags)                    tags = String(metadata.tags);\nelse if (Array.isArray(metadata.hashtags)) tags = metadata.hashtags.join(', ');\n\nlet publishedAt = metadata.publishedAt || metadata.published_at || '';\nif (!publishedAt && metadata.createTime)         publishedAt = new Date(metadata.createTime * 1000).toISOString();\nif (!publishedAt && metadata.timestamp)          publishedAt = new Date(metadata.timestamp * 1000).toISOString();\nif (!publishedAt && metadata.taken_at_timestamp) publishedAt = new Date(metadata.taken_at_timestamp * 1000).toISOString();\n\nconst description  = (metadata.description || metadata.desc || metadata.caption || '').substring(0,5000);\nconst viewCount    = parseInt(metadata.viewCount    || metadata.playCount    || metadata.view_count    || metadata.video_view_count || 0);\nconst likeCount    = parseInt(metadata.likeCount    || metadata.like_count   || metadata.likes_count   || metadata.diggCount || 0);\nconst commentCount = parseInt(metadata.commentCount || metadata.comment_count|| metadata.comments_count|| 0);\nconst duration     = parseInt(metadata.durationSeconds || metadata.duration  || 0);\n\nconst platformBaseline = { YouTube: 5000, Instagram: 10000, TikTok: 50000 }[platform] || 5000;\nconst outlierScore = viewCount > 0 ? parseFloat((viewCount / platformBaseline).toFixed(2)) : 0;\n\nconst out = {\n  recordId, platform, url, alreadyProcessed, cfg,\n  existingSourceName, existingPlatform, existingCategory,\n  existingIgHandle, existingTtHandle, existingStatus, existingSourceType,\n  authorHandle, metadata, inferredCategory,\n  needsVideoLib, needsViralLib, needsReelEngine,\n  existingVLId, existingViralId, existingReelId,\n  'Video ID':       identifier,\n  'Title':          title,\n  'URL':            url,\n  'Platform':       platform,\n  'Source Name':    sourceName,\n  'Channel ID':     channelId,\n  'Creator_Handle': creatorHandle,\n  'Description':    description,\n  'Tags':           tags,\n  'Content Type':   contentType,\n  'Status':         'Promoted',\n  'Outlier Score':  outlierScore,\n  'Associated_Sources': recordId ? [recordId] : [],\n};\nif (viewCount > 0)    out['View Count']    = viewCount;\nif (likeCount > 0)    out['Like Count']    = likeCount;\nif (commentCount > 0) out['Comment Count'] = commentCount;\nif (duration > 0)     out['Duration']      = duration;\nif (publishedAt)      out['Published At']  = publishedAt;\nreturn { json: out };"
+      },
+      "id": "933b5117-fa10-4cd0-8410-73c2a96240c6",
+      "name": "5b. Build Video Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        35008,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "video-gate",
+              "leftValue": "={{ $json.needsVideoLib }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            },
+            {
+              "id": "viral-gate",
+              "leftValue": "={{ $json.needsViralLib }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            },
+            {
+              "id": "reel-gate",
+              "leftValue": "={{ $json.needsReelEngine }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "72810f22-39f0-4b43-81fc-1ae83d2d6a30",
+      "name": "5b. Has Video to Create?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        35232,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nconst aiResponse = $input.item.json;\nconst d = $('3a. Parse Links URL').first().json;\nconst metadata = $('4a. Fetch Profile Metadata').first().json.metadata || {};\nlet ai = {};\ntry {\n  let raw = aiResponse.choices[0].message.content || '';\n  raw = raw.replace(/```json|```/g, '').trim();\n  ai = JSON.parse(raw);\n} catch(e) { ai = {}; }\nfunction toTitleCase(str) {\n  if (!str) return '';\n  let s = str.trim();\n  if (!s.includes(' ')) { s = s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([a-zA-Z])([0-9])/g, '$1 $2'); }\n  return s.toLowerCase().split(' ').filter(w => w.length > 0).map(w => w[0].toUpperCase() + w.slice(1)).join(' ');\n}\nfunction cleanHandle(h) { const raw = (h || '').replace(/^@/, '').trim(); return raw ? '@' + raw : ''; }\nconst ex = d.existing || {};\nconst update = { id: d.recordId };\nif (!ex.sourceName) {\n  const rawName = ai.source_name || metadata.channelTitle || metadata.full_name || metadata.name || metadata.nickname || metadata.display_name || metadata.displayName || '';\n  update['Source Name'] = toTitleCase(rawName || d.identifier || '');\n}\nif (!ex.platform)     update['Platform']      = d.platform;\nif (!ex.category)     update['Category']      = ai.category      || 'Other';\nif (!ex.sourceType)   update['Source Type']   = ai.source_type   || d.platform;\nif (!ex.primaryFocus) update['Primary Focus'] = ai.primary_focus || '';\nif (!ex.status)       update['Status']        = 'Active';\nupdate['Last Checked'] = new Date().toISOString();\nif (d.platform === 'YouTube') {\n  if (!ex.ytChannelId)   update['YouTube Channel ID']   = metadata.channelId || (d.identifierType === 'channel_id' ? d.identifier : '');\n  if (!ex.ytChannelName) update['YouTube Channel Name'] = toTitleCase(metadata.channelTitle || ai.source_name || '');\n}\nif (d.platform === 'Instagram' && !ex.igHandle) {\n  const h = cleanHandle(metadata.username || metadata.owner?.username || (d.identifierType === 'handle' ? d.identifier : '') || ai.instagram_handle || '');\n  if (h) update['Instagram_Handle'] = h;\n}\nif (d.platform === 'TikTok' && !ex.ttHandle) {\n  const h = cleanHandle(metadata.uniqueId || metadata.username || (d.identifierType === 'handle' ? d.identifier : '') || ai.tiktok_handle || '');\n  if (h) update['TikTok_Handle'] = h;\n}\nif (!ex.ttHandle && ai.tiktok_handle)    update['TikTok_Handle']    = cleanHandle(ai.tiktok_handle);\nif (!ex.igHandle && ai.instagram_handle) update['Instagram_Handle'] = cleanHandle(ai.instagram_handle);\nreturn { json: update };\n"
+      },
+      "id": "a3bb0475-4983-4b23-828d-99f03c43ea32",
+      "name": "6a. Update Source Radar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        34560,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c3. Pick First Link').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Source Name",
+              "displayName": "Source Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source Type",
+              "displayName": "Source Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Primary Focus",
+              "displayName": "Primary Focus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Handle",
+              "displayName": "Instagram_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "TikTok_Handle",
+              "displayName": "TikTok_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "YouTube Channel ID",
+              "displayName": "YouTube Channel ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "YouTube Channel Name",
+              "displayName": "YouTube Channel Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Last Checked",
+              "displayName": "Last Checked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "96aecf85-bbee-471d-9ec5-340f150b9b74",
+      "name": "6a-write. Write Source Radar Update",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        34784,
+        2160
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "cbc94dd8-989d-4767-bf49-8253b6e3991f",
+      "name": "Done (Links)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        32768,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nconst d = $input.item.json;\nconst out = {\n  'Video ID':       d['Video ID']       || '',\n  'Title':          d['Title']          || '',\n  'URL':            d['URL']            || '',\n  'Platform':       d['Platform']       || '',\n  'Source Name':    d['Source Name']    || '',\n  'Channel ID':     d['Channel ID']     || '',\n  'Creator_Handle': d['Creator_Handle'] || '',\n  'Description':    d['Description']    || '',\n  'Tags':           d['Tags']           || '',\n  'Content Type':   d['Content Type']   || '',\n  'Status':         'Promoted',\n  'Outlier Score':  d['Outlier Score']  || 0,\n  'Associated_Sources': d.recordId ? [d.recordId] : [],\n};\nif (d['View Count']    > 0) out['View Count']    = d['View Count'];\nif (d['Like Count']    > 0) out['Like Count']    = d['Like Count'];\nif (d['Comment Count'] > 0) out['Comment Count'] = d['Comment Count'];\nif (d['Duration']      > 0) out['Duration']      = d['Duration'];\nif (d['Published At'])      out['Published At']  = d['Published At'];\nreturn { json: out };\n"
+      },
+      "id": "2df208e9-efe0-414a-9fd0-b68481dccd0d",
+      "name": "5b-clean. Build Video Library Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        35456,
+        2688
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1d3. Pick First Video').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "Video ID"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Video ID",
+              "displayName": "Video ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "URL",
+              "displayName": "URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source Name",
+              "displayName": "Source Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Channel ID",
+              "displayName": "Channel ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Creator_Handle",
+              "displayName": "Creator_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Tags",
+              "displayName": "Tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "View Count",
+              "displayName": "View Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Like Count",
+              "displayName": "Like Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Comment Count",
+              "displayName": "Comment Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Duration",
+              "displayName": "Duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Published At",
+              "displayName": "Published At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Content Type",
+              "displayName": "Content Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Outlier Score",
+              "displayName": "Outlier Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Associated_Sources",
+              "displayName": "Associated_Sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "96e3fbc2-253e-4515-a6d4-da91c82999e6",
+      "name": "6b. Add to Video Library",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        35680,
+        2688
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1d3. Pick First Video').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Topic": "={{ $('5b. Build Video Records').first().json['Title'] || $('5b. Build Video Records').first().json.url }}",
+            "Status": "Idea",
+            "Platform": "={{ $('5b. Build Video Records').first().json.platform }}",
+            "Source Name": "={{ $('5b. Build Video Records').first().json['Source Name'] || '' }}",
+            "Source URL": "={{ $('5b. Build Video Records').first().json.url }}",
+            "Category": "={{ $('5b. Build Video Records').first().json.inferredCategory || 'News' }}",
+            "Content Type": "={{ $('5b. Build Video Records').first().json['Content Type'] || '' }}",
+            "Publish_Date": "={{ $now.plus({days: 3}).toFormat('yyyy-MM-dd') }}",
+            "Date Added": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "Reel_Notes": "={{ ($('5b. Build Video Records').first().json.existingSourceName ? $('5b. Build Video Records').first().json.existingSourceName + ' \\u2014 ' : '') + 'Handpicked video: ' + $('5b. Build Video Records').first().json.url }}"
+          },
+          "matchingColumns": [
+            "Source URL"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Topic",
+              "id": "Topic",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Status",
+              "id": "Status",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Platform",
+              "id": "Platform",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Source Name",
+              "id": "Source Name",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Source URL",
+              "id": "Source URL",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Category",
+              "id": "Category",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Content Type",
+              "id": "Content Type",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Publish_Date",
+              "id": "Publish_Date",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Date Added",
+              "id": "Date Added",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Reel_Notes",
+              "id": "Reel_Notes",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "693375a6-11b2-490d-9941-300b20a40102",
+      "name": "6b2. Create Reel Engine Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        35904,
+        2688
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1d3. Pick First Video').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "id": "={{ $('6b2. Create Reel Engine Record').item.json.id }}",
+            "Associated_Sources": "={{ [$('5b. Build Video Records').first().json.recordId] }}"
+          },
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Associated_Sources",
+              "displayName": "Associated_Sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1df79461-a25c-49a0-a0e0-fa0f5b19d087",
+      "name": "6b3. Link Source to Reel Engine",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        36128,
+        2688
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1d3. Pick First Video').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "URL": "={{ $('5b. Build Video Records').first().json.url }}",
+            "Platform": "={{ $('5b. Build Video Records').first().json.platform }}",
+            "Creator_Handle": "={{ $('5b. Build Video Records').first().json['Creator_Handle'] || $('5b. Build Video Records').first().json.creatorHandle || '' }}",
+            "Processed": false
+          },
+          "matchingColumns": [
+            "URL"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "URL",
+              "displayName": "URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Creator_Handle",
+              "displayName": "Creator_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Processed",
+              "displayName": "Processed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "68b5ece2-36c0-4296-a30f-1f16f8bd7924",
+      "name": "6c. Add to Viral Library",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        36352,
+        2688
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1d3. Pick First Video').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "id": "={{ $('6c. Add to Viral Library').item.json.id }}",
+            "Source": "={{ [$('5b. Build Video Records').first().json.recordId] }}",
+            "Reel Engine": "={{ [$('6b2. Create Reel Engine Record').item.json.id] }}"
+          },
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Reel Engine",
+              "displayName": "Reel Engine",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e5e38173-cc9f-459e-a2ad-f59defdcaa7a",
+      "name": "6c-link. Link Source to Viral Library",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        36576,
+        2688
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1d3. Pick First Video').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "Viral_Pattern_Used": "={{ [$('6c. Add to Viral Library').item.json.id] }}",
+            "id": "={{ $('6b2. Create Reel Engine Record').item.json.id }}"
+          },
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "17392a57-cf1d-4a25-adb5-911737832c1a",
+      "name": "6c-vpu. Link Viral Pattern to Reel Engine",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        36800,
+        2688
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('5b. Build Video Records').first().json;\nconst item = $('1d3. Pick First Video').first().json;\nconst existingStatus     = item['Status']?.name     || item['Status']     || '';\nconst existingSourceType = item['Source Type']?.name|| item['Source Type']|| '';\nconst existingSourceName = item['Source Name']      || '';\nconst existingPlatform   = item['Platform']         || '';\nconst existingCategory   = item['Category']?.name   || item['Category']   || '';\nconst existingIgHandle   = item['Instagram_Handle'] || '';\nconst existingTtHandle   = item['TikTok_Handle']    || '';\nconst update = { id: d.recordId, 'Video_Links_Processed': true, 'Last Checked': new Date().toISOString() };\nif (!existingSourceName)  update['Source Name']  = d['Source Name'] || d.existingSourceName || '';\nif (!existingPlatform)    update['Platform']     = d.platform || '';\nif (!existingCategory)    update['Category']     = d.inferredCategory || 'News';\nif (!existingStatus)      update['Status']       = 'Active';\nif (!existingSourceType)  update['Source Type']  = d.platform || '';\nif (!existingIgHandle && d.platform === 'Instagram' && d.authorHandle) {\n  update['Instagram_Handle'] = '@' + d.authorHandle.replace(/^@/, '');\n}\nif (!existingTtHandle && d.platform === 'TikTok' && d.authorHandle) {\n  update['TikTok_Handle'] = '@' + d.authorHandle.replace(/^@/, '');\n}\nreturn { json: update };"
+      },
+      "id": "8e502c53-4297-48fb-8c74-b2263b22b4d4",
+      "name": "6d. Update Source Radar from Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        37024,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1d3. Pick First Video').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source Name",
+              "displayName": "Source Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Handle",
+              "displayName": "Instagram_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "TikTok_Handle",
+              "displayName": "TikTok_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Video_Links_Processed",
+              "displayName": "Video_Links_Processed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Last Checked",
+              "displayName": "Last Checked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source Type",
+              "displayName": "Source Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "b8ea973c-1b0a-45ad-964f-e71155ef3649",
+      "name": "6d-write. Write Source Radar from Video",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        37248,
+        3024
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "7467a437-e6c2-4412-91e3-c461cccfc8d6",
+      "name": "Done (Video)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        32768,
+        2944
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "1b1d7bd0-eb94-4d89-8c4d-3aeec9ff2f46",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        32096,
+        2800
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  out.push({ json: { client_name: name, video_base_id: c['Video_Base_ID'] } });\n}\nreturn out;"
+      },
+      "id": "55256db2-db55-48d1-b295-db715c321126",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32320,
+        2800
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "c58a51ca-307e-4e49-b292-5dfefcce56e8",
+      "name": "0cA. Client Loop (Links)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        32544,
+        2416
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "13590644-c4a1-4e98-8f83-dd20cce60ee9",
+      "name": "0cB. Client Loop (Video)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        32544,
+        3136
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0cA. Client Loop (Links)');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "a4030917-3763-4c12-8f36-30a23799b6a5",
+      "name": "1c2. Attach Config (Links)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32992,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst cfg = (all[0] && all[0].json && all[0].json.cfg) || null;\nif (!cfg) { throw new Error('Client config missing on the Links branch.'); }\nconst recs = all.filter(i => i.json && i.json.id);\nif (!recs.length) { return [{ json: { has_record: false, cfg } }]; }\nreturn [{ json: { ...recs[0].json, has_record: true, cfg } }];"
+      },
+      "id": "12824457-4cf5-4752-9143-d6a329872d86",
+      "name": "1c3. Pick First Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        33216,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrecA",
+              "leftValue": "={{ $json.has_record }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "00355b4c-0b9e-447b-be06-7fa94b84e906",
+      "name": "1c4. Has Link Record?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        33440,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0cB. Client Loop (Video)');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "42e9f722-0904-4223-8b57-1729091ed594",
+      "name": "1d2. Attach Config (Video)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32992,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst cfg = (all[0] && all[0].json && all[0].json.cfg) || null;\nif (!cfg) { throw new Error('Client config missing on the Video branch.'); }\nconst recs = all.filter(i => i.json && i.json.id);\nif (!recs.length) { return [{ json: { has_record: false, cfg } }]; }\nreturn [{ json: { ...recs[0].json, has_record: true, cfg } }];"
+      },
+      "id": "9818c646-2735-4aba-abed-c8257ba17308",
+      "name": "1d3. Pick First Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        33216,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrecB",
+              "leftValue": "={{ $json.has_record }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "1ae169d6-9ee5-446a-a4bc-b443a9e6311a",
+      "name": "1d4. Has Video Record?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        33440,
+        2752
+      ]
+    }
+  ],
+  "pinData": {
+    "1. Every 1 Minute": [
+      {
+        "json": {
+          "timestamp": "2026-08-04T21:58:25.006+10:00",
+          "Readable date": "August 4th 2026, 9:58:25 pm",
+          "Readable time": "9:58:25 pm",
+          "Day of week": "Tuesday",
+          "Year": "2026",
+          "Month": "August",
+          "Day of month": "04",
+          "Hour": "21",
+          "Minute": "58",
+          "Second": "25",
+          "Timezone": "Australia/Sydney (UTC+10:00)"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "3a. Parse Links URL": {
+      "main": [
+        [
+          {
+            "node": "3a. Can Resolve Link?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Parse Video Links URL": {
+      "main": [
+        [
+          {
+            "node": "3b. Can Resolve Video?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3a. Can Resolve Link?": {
+      "main": [
+        [
+          {
+            "node": "4a. Fetch Profile Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0cA. Client Loop (Links)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Can Resolve Video?": {
+      "main": [
+        [
+          {
+            "node": "4b-route. Platform Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0cB. Client Loop (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4a. Fetch Profile Metadata": {
+      "main": [
+        [
+          {
+            "node": "5a. AI Fill Source Radar Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b-route. Platform Switch": {
+      "main": [
+        [
+          {
+            "node": "4b-yt. Fetch YouTube Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4b-ti. Fetch TikTok Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4b-ig. Fetch Instagram Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b-yt. Fetch YouTube Metadata": {
+      "main": [
+        [
+          {
+            "node": "4b. Fetch Video Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b-ig. Fetch Instagram Metadata": {
+      "main": [
+        [
+          {
+            "node": "4b. Fetch Video Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b-ti. Fetch TikTok Metadata": {
+      "main": [
+        [
+          {
+            "node": "4b. Fetch Video Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Fetch Video Metadata": {
+      "main": [
+        [
+          {
+            "node": "4b-check. Error Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b-check. Error Guard": {
+      "main": [
+        [
+          {
+            "node": "5b. Build Video Records",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0cB. Client Loop (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5a. AI Fill Source Radar Fields": {
+      "main": [
+        [
+          {
+            "node": "6a. Update Source Radar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Build Video Records": {
+      "main": [
+        [
+          {
+            "node": "5b. Has Video to Create?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6a. Update Source Radar": {
+      "main": [
+        [
+          {
+            "node": "6a-write. Write Source Radar Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b-clean. Build Video Library Fields": {
+      "main": [
+        [
+          {
+            "node": "6b. Add to Video Library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c-vpu. Link Viral Pattern to Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "6d. Update Source Radar from Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d. Update Source Radar from Video": {
+      "main": [
+        [
+          {
+            "node": "6d-write. Write Source Radar from Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0cA. Client Loop (Links)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "0cB. Client Loop (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0cA. Client Loop (Links)": {
+      "main": [
+        [
+          {
+            "node": "Done (Links)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1c. Get Unresolved Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Get Unresolved Links": {
+      "main": [
+        [
+          {
+            "node": "1c2. Attach Config (Links)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c2. Attach Config (Links)": {
+      "main": [
+        [
+          {
+            "node": "1c3. Pick First Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c3. Pick First Link": {
+      "main": [
+        [
+          {
+            "node": "1c4. Has Link Record?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c4. Has Link Record?": {
+      "main": [
+        [
+          {
+            "node": "3a. Parse Links URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0cA. Client Loop (Links)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6a-write. Write Source Radar Update": {
+      "main": [
+        [
+          {
+            "node": "0cA. Client Loop (Links)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0cB. Client Loop (Video)": {
+      "main": [
+        [
+          {
+            "node": "Done (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1d. Get Unresolved Video Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d. Get Unresolved Video Links": {
+      "main": [
+        [
+          {
+            "node": "1d2. Attach Config (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d2. Attach Config (Video)": {
+      "main": [
+        [
+          {
+            "node": "1d3. Pick First Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d3. Pick First Video": {
+      "main": [
+        [
+          {
+            "node": "1d4. Has Video Record?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d4. Has Video Record?": {
+      "main": [
+        [
+          {
+            "node": "3b. Parse Video Links URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0cB. Client Loop (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Add to Video Library": {
+      "main": [
+        [
+          {
+            "node": "6b2. Create Reel Engine Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b2. Create Reel Engine Record": {
+      "main": [
+        [
+          {
+            "node": "6b3. Link Source to Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b3. Link Source to Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "6c. Add to Viral Library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Add to Viral Library": {
+      "main": [
+        [
+          {
+            "node": "6c-link. Link Source to Viral Library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c-link. Link Source to Viral Library": {
+      "main": [
+        [
+          {
+            "node": "6c-vpu. Link Viral Pattern to Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d-write. Write Source Radar from Video": {
+      "main": [
+        [
+          {
+            "node": "0cB. Client Loop (Video)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Has Video to Create?": {
+      "main": [
+        [
+          {
+            "node": "5b-clean. Build Video Library Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6d. Update Source Radar from Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "Australia/Sydney"
+  },
+  "versionId": "4d6b4bb9-c511-4c35-807d-2c076972e49f",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "ifHkVuKouRTGSREo",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}

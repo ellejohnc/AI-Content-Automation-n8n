@@ -1,0 +1,341 @@
+{
+  "name": "WF_SFX_Setup - Download SFX Library to Drive (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "06e546c5-009e-44c6-85df-11169ef1af71",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1344,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const BASE = 'https://raw.githubusercontent.com/manthanpatelll/soundeffects-claude-code/main/sfx';\nconst files = [\n  { soundName: 'camera_shutter',  filename: 'camera_shutter.wav',  url: BASE + '/Camera%20Shutter%205.wav' },\n  { soundName: 'ding',            filename: 'ding.wav',             url: BASE + '/Correct%20Ding.wav' },\n  { soundName: 'impact',          filename: 'impact.wav',           url: BASE + '/Impact%207.wav' },\n  { soundName: 'keyboard',        filename: 'keyboard.wav',         url: BASE + '/Keyboard-Button-Click-06-c-FesliyanStudios.com_.wav' },\n  { soundName: 'mouse_click',     filename: 'mouse_click.wav',      url: BASE + '/Mouse%20Click.wav' },\n  { soundName: 'riser',           filename: 'riser.wav',            url: BASE + '/Riser%203.wav' },\n  { soundName: 'whoosh',          filename: 'whoosh.wav',           url: BASE + '/Whoosh%201.wav' },\n  { soundName: 'air_hit',         filename: 'air_hit.wav',          url: BASE + '/mixkit-air-in-a-hit-2161.wav' },\n  { soundName: 'notification',    filename: 'notification.wav',     url: BASE + '/mixkit-bike-notification-bell-590.wav' },\n  { soundName: 'digital_shutter', filename: 'digital_shutter.wav',  url: BASE + '/mixkit-camera-digital-shutter-1432.wav' },\n  { soundName: 'double_click',    filename: 'double_click.wav',     url: BASE + '/mixkit-fast-double-click-on-mouse-275.wav' },\n  { soundName: 'digital_readout', filename: 'digital_readout.wav',  url: BASE + '/textdigitalreadout.wav' }\n];\nreturn files.map(f => ({ json: f }));"
+      },
+      "id": "64c18988-7467-4c74-abca-875e24325e4f",
+      "name": "1. SFX File List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "49fd9236-6f9f-4aab-af0e-45eada3cfa54",
+      "name": "2. Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -896,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nconst folderId = '1NdWG8ggfJg5tRXtQxRdE3yhlFUezbaA4';\nreturn [{\n  json: {\n    url: item.url,\n    filename: item.filename,\n    soundName: item.soundName,\n    driveQuery: `name = '${item.filename}' and '${folderId}' in parents and trashed = false`\n  }\n}];"
+      },
+      "id": "66fa8d54-70fb-429b-8f0f-17f44b5364c2",
+      "name": "3. Build Drive Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        -464
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.driveQuery }}"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a14c60d3-83f6-4dd2-bb19-4b4fc746552b",
+      "name": "4. Check if Already in Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -448,
+        -464
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "exists",
+              "leftValue": "={{ $json.files.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "491f4fee-9a43-4ced-941a-a00e88b51945",
+      "name": "5. Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        -464
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0d9aab91-7224-43c6-82d9-c398bee2edc7",
+      "name": "5b. Skip (Already Exists)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -464
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('3. Build Drive Query').item.json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "e1b80563-6f75-4607-9ed9-f64fdfaa568a",
+      "name": "6. Download from GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('3. Build Drive Query').item.json.filename }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1NdWG8ggfJg5tRXtQxRdE3yhlFUezbaA4",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "5048170d-0dfb-40ec-9359-303489982382",
+      "name": "7. Upload to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        224,
+        -272
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "unit": "seconds"
+      },
+      "id": "5a760610-8c32-4a27-8043-3e405479993c",
+      "name": "8. Wait 1s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -176
+      ],
+      "webhookId": "sfx-setup-wait-001"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. SFX File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. SFX File List": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Batch of 1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "3. Build Drive Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Build Drive Query": {
+      "main": [
+        [
+          {
+            "node": "4. Check if Already in Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Check if Already in Drive": {
+      "main": [
+        [
+          {
+            "node": "5. Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "5b. Skip (Already Exists)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6. Download from GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Skip (Already Exists)": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Download from GitHub": {
+      "main": [
+        [
+          {
+            "node": "7. Upload to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Upload to Drive": {
+      "main": [
+        [
+          {
+            "node": "8. Wait 1s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Wait 1s": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6c40d184-6c28-48bf-84f9-86b4098a72ba",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "QI1FOCyILpcgfAe9",
+  "tags": [
+    {
+      "updatedAt": "2026-05-04T00:48:38.480Z",
+      "createdAt": "2026-05-04T00:48:38.480Z",
+      "id": "oJ2giFXyOtb2YOLh",
+      "name": "Design"
+    }
+  ]
+}

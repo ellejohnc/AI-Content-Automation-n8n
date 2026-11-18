@@ -1,0 +1,1306 @@
+{
+  "name": "WF_BGM - Background Music Generator (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "ac57bd20-91a5-442c-b7fe-603b840bb031",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        2752,
+        -1184
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4fd0808f-aff1-4adc-aadd-605f15eb4ec0",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        2752,
+        -1376
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Music_BGM} != '', {BGM_File_URL} = '', {BGM_Track_2_URL} = '')",
+        "options": {}
+      },
+      "id": "3e5fb7b1-0e14-456f-8fb0-1fc52025209a",
+      "name": "1. Get Records Needing BGM",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3872,
+        -1552
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "99146a32-cff7-4080-845e-6f75ff93f735",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4320,
+        -1552
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const record = $input.item.json;\nconst cfg = record.cfg || {};\nconst g = cfg.bgm || {};\nconst recordId = record.id || '';\nconst topic = (record['Topic'] || 'content');\nconst musicBgm = record['Music_BGM'] || '';\nconst FOLDER = g.drive_folder_id || cfg.drive_folder_id || '';\nconst PREFIX = g.filename_prefix || 'BGM';\nconst TRANSITION_PCT = g.transition_percent || 40;\nconst CROSSFADE = g.crossfade_note || '0.5-1s crossfade at transition point';\n\nconst blocks = musicBgm.split(/\\n\\n+/).filter(b => b.trim().length > 0);\n\nconst extractBlock = (block) => {\n  const lines = block.trim().split('\\n').map(l => l.trim()).filter(l => l.length > 0);\n  // WF06c writes: \"1. News - Part 1 (120 BPM) (Part 1) starts at 0:00\"\n  // Strip the leading number, the \"(Part N)\" marker and the trailing \"starts at m:ss\",\n  // collapsing whitespace so the variant name does not end up glued together.\n  let variantLine = lines[0]\n    .replace(/^\\d+\\.\\s*/, '')\n    .replace(/\\s*\\(Part \\d+\\)\\s*/i, ' ')\n    .replace(/\\s*starts?\\s+at\\s+\\d+:\\d{1,2}\\s*$/i, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  const promptText = lines.slice(1).join(' ').trim();\n  const prompt = promptText || `Background music for ${topic}. Style: ${variantLine}. Instrumental only, no vocals.`;\n  const safeName = variantLine\n    .replace(/\\s*\\u2014\\s*/g, '_')\n    .replace(/\\s*\\|\\s*/g, '_')\n    .replace(/\\s+/g, '_')\n    .replace(/[^a-zA-Z0-9_]/g, '')\n    .replace(/_+/g, '_')\n    .replace(/^_|_$/g, '')\n    .substring(0, 50)\n    .toLowerCase();\n  return { variant: variantLine, prompt, safeName };\n};\n\nconst stopWords = g.stop_words || ['the','a','an','is','are','was','were','in','on','at','of','to','for','and','or','but','how','why','what','will','can','do','does','has','have','this','that','with','from'];\nconst topicKey = topic\n  .toLowerCase()\n  .replace(/[^a-z0-9\\s]/g, '')\n  .split(/\\s+/)\n  .filter(w => w.length > 0 && stopWords.indexOf(w) === -1)\n  .slice(0, 3)\n  .join('_') || 'general';\n\nlet track1 = { variant: 'generic_bgm_part1', prompt: g.fallback_prompt_1 ? String(g.fallback_prompt_1).split('{{topic}}').join(topic) : `Background music for a social media video about: ${topic}. Upbeat, corporate, instrumental, no vocals, part 1.`, safeName: 'generic_bgm_part1' };\nlet track2 = { variant: 'generic_bgm_part2', prompt: g.fallback_prompt_2 ? String(g.fallback_prompt_2).split('{{topic}}').join(topic) : `Background music for a social media video about: ${topic}. Upbeat, corporate, instrumental, no vocals, part 2, higher energy.`, safeName: 'generic_bgm_part2' };\n\nif (blocks.length >= 1) track1 = extractBlock(blocks[0]);\nif (blocks.length >= 2) track2 = extractBlock(blocks[1]);\n\nconst filename1 = `${PREFIX}_${track1.safeName}_${topicKey}_part1.mp3`;\nconst filename2 = `${PREFIX}_${track2.safeName}_${topicKey}_part2.mp3`;\n\nconst transitionNote = `BGM TRANSITION: Part 1 (${track1.variant}) runs from 0:00. Part 2 (${track2.variant}) starts at ${TRANSITION_PCT}% of video duration. Apply ${CROSSFADE}.`;\n\nconst driveQuery1 = \"name = '\" + filename1 + \"' and '\" + FOLDER + \"' in parents and trashed = false\";\nconst driveQuery2 = \"name = '\" + filename2 + \"' and '\" + FOLDER + \"' in parents and trashed = false\";\n\nreturn { json: {\n  cfg,\n  record_id: recordId,\n  topic,\n  topicKey,\n  prompt1: track1.prompt,\n  prompt2: track2.prompt,\n  filename1,\n  filename2,\n  variant1: track1.variant,\n  variant2: track2.variant,\n  transition_note: transitionNote,\n  music_bgm_raw: musicBgm,\n  drive_folder_id: FOLDER,\n  driveQuery1,\n  driveQuery2\n} };"
+      },
+      "id": "e2ad2e13-7163-444c-adb1-b2abaf04a6d3",
+      "name": "2. Build BGM Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4544,
+        -1552
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.driveQuery1 }}"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "corpora",
+              "value": "allDrives"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7f6b2559-a8ea-40fa-b802-478c08926f66",
+      "name": "2b. Search Drive Track 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4768,
+        -1552
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "exists-check-1",
+              "leftValue": "={{ $json.files.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7b138a70-05cd-42d4-838b-353d0be6dcb5",
+      "name": "2c. Track 1 Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4992,
+        -1552
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const existing = $input.item.json;\nconst context = $('2. Build BGM Prompt').item.json;\nreturn { json: {\n  cfg: context.cfg,\n  record_id: context.record_id,\n  track1_url: `https://drive.google.com/uc?export=download&id=${existing.files[0].id}`,\n  track1_file_id: existing.files[0].id,\n  filename1: context.filename1,\n  reused_1: true,\n  prompt2: context.prompt2,\n  filename2: context.filename2,\n  driveQuery2: context.driveQuery2,\n  transition_note: context.transition_note\n} };"
+      },
+      "id": "adac730c-7f5a-408d-b2fe-e2badc530ed5",
+      "name": "2d. Reuse Track 1 URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5664,
+        -1648
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/music/compose",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xi-api-key",
+              "value": "sk_e623aaede2932abde4be5ec39d4dc3a25eff0f4a65e606ec"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (function(){ const c = $('2. Build BGM Prompt').item.json; const g = (c.cfg || {}).bgm || {}; return JSON.stringify({ prompt: c.prompt1, duration_ms: g.duration_ms || 45000, output_format: g.output_format || 'mp3_44100_128' }); })() }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "6a9bfc30-5ab4-470d-8a72-eb2f5a163af3",
+      "name": "3. Generate Track 1 (ElevenLabs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5216,
+        -1456
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('2. Build BGM Prompt').item.json.filename1 }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2. Build BGM Prompt').item.json.cfg.drive_shared_drive_id }}"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2. Build BGM Prompt').item.json.drive_folder_id }}"
+        },
+        "options": {}
+      },
+      "id": "568bcf03-b44a-4b21-b3da-3703fe3de7f1",
+      "name": "4. Upload Track 1 to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        5440,
+        -1456
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const driveFile = $input.item.json;\nconst context = $('2. Build BGM Prompt').item.json;\nreturn { json: {\n  cfg: context.cfg,\n  record_id: context.record_id,\n  track1_url: `https://drive.google.com/uc?export=download&id=${driveFile.id}`,\n  track1_file_id: driveFile.id,\n  filename1: context.filename1,\n  reused_1: false,\n  prompt2: context.prompt2,\n  filename2: context.filename2,\n  driveQuery2: context.driveQuery2,\n  transition_note: context.transition_note\n} };"
+      },
+      "id": "304c8b82-d02d-44dd-8b12-5408504cc246",
+      "name": "5. Build Track 1 URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5664,
+        -1456
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.driveQuery2 }}"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "corpora",
+              "value": "allDrives"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2fee41fa-f46a-45cb-b0f9-ed6d5fa803dd",
+      "name": "5b. Search Drive Track 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5888,
+        -1552
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "exists-check-2",
+              "leftValue": "={{ $json.files.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dccf99e9-e4e3-4329-a563-0c492b69d581",
+      "name": "5c. Track 2 Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6112,
+        -1552
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const existing = $input.item.json;\nconst context = $('2. Build BGM Prompt').item.json;\nlet track1Data = {};\ntry { track1Data = $('5. Build Track 1 URL').item.json; } catch (e) {\n  try { track1Data = $('2d. Reuse Track 1 URL').item.json; } catch (e2) { track1Data = {}; }\n}\nreturn { json: {\n  cfg: track1Data.cfg || context.cfg,\n  record_id: track1Data.record_id || context.record_id,\n  track1_url: track1Data.track1_url || '',\n  track2_url: `https://drive.google.com/uc?export=download&id=${existing.files[0].id}`,\n  reused_2: true,\n  transition_note: track1Data.transition_note || context.transition_note\n} };"
+      },
+      "id": "19a1abce-9e6e-43c7-be36-9f275b152d9b",
+      "name": "5d. Reuse Track 2 URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7008,
+        -1648
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/music/compose",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xi-api-key",
+              "value": "sk_e623aaede2932abde4be5ec39d4dc3a25eff0f4a65e606ec"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.track2_body }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "57048180-77ff-445f-8398-572f2b69921b",
+      "name": "6. Generate Track 2 (ElevenLabs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6560,
+        -1456
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('2. Build BGM Prompt').item.json.filename2 }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2. Build BGM Prompt').item.json.cfg.drive_shared_drive_id }}"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2. Build BGM Prompt').item.json.drive_folder_id }}"
+        },
+        "options": {}
+      },
+      "id": "2dbeca98-aa53-448b-b58a-30ea71509170",
+      "name": "6b. Upload Track 2 to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        6784,
+        -1456
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const driveFile = $input.item.json;\nconst context = $('2. Build BGM Prompt').item.json;\nlet track1Data = {};\ntry { track1Data = $('5. Build Track 1 URL').item.json; } catch (e) {\n  try { track1Data = $('2d. Reuse Track 1 URL').item.json; } catch (e2) { track1Data = {}; }\n}\nreturn { json: {\n  cfg: track1Data.cfg || context.cfg,\n  record_id: track1Data.record_id || context.record_id,\n  track1_url: track1Data.track1_url || '',\n  track2_url: `https://drive.google.com/uc?export=download&id=${driveFile.id}`,\n  reused_2: false,\n  transition_note: track1Data.transition_note || context.transition_note\n} };"
+      },
+      "id": "0c9ee9fe-3c22-4a10-815e-e0c652a90220",
+      "name": "6c. Build Track 2 URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7008,
+        -1456
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "BGM_File_URL": "={{ $json.track1_url }}",
+            "BGM_Track_2_URL": "={{ $json.track2_url }}",
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "2d87b4e3-260a-45dd-8b72-5128a977bf49",
+      "name": "7. Write Both URLs to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        7680,
+        -1376
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('2. Build BGM Prompt').item.json;\nconst g = (ctx.cfg || {}).bgm || {};\nconst prompt2 = ctx.prompt2 || '';\n\nif (!prompt2) {\n  throw new Error('prompt2 is empty \\u2014 Music_BGM may only have one block. Raw: ' + (ctx.music_bgm_raw || '').substring(0, 200));\n}\n\nconst body = JSON.stringify({\n  prompt: prompt2,\n  duration_ms: g.duration_ms || 45000,\n  output_format: g.output_format || 'mp3_44100_128'\n});\n\nreturn { json: { ...$input.item.json, cfg: ctx.cfg, track2_body: body, prompt2_debug: prompt2.substring(0, 100) } };"
+      },
+      "id": "dbf64f0a-e45a-4ae2-9c96-1f7e99613a00",
+      "name": "5e. Build Track 2 Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6336,
+        -1456
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "9a6ee534-0a54-4c50-92e6-1f2ac4033342",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        2976,
+        -1280
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Enabled}",
+        "options": {}
+      },
+      "id": "171aaf02-a81d-4704-ac23-27ddf61642f8",
+      "name": "0a2. Load Client Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        3200,
+        -1280
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'bgm';\n\nfunction parseJson(raw, label) {\n  if (!raw) return {};\n  try {\n    const v = JSON.parse(raw);\n    if (v && typeof v === 'object' && !Array.isArray(v)) return v;\n    return {};\n  } catch (e) { console.log('[0b] Invalid Config_JSON on ' + label + ': ' + e.message); return {}; }\n}\n\nconst outputs = $input.all().map(i => i.json);\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outByKey = {};\nfor (const o of outputs) {\n  const key = (o['Key'] || '').trim().toLowerCase();\n  if (key) outByKey[key] = o;\n}\n\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  const o = outByKey[(name + '::' + OUTPUT_TYPE).toLowerCase()] || null;\n  const merged = { ...parseJson(c['Config_JSON'], name), ...parseJson(o ? o['Config_JSON'] : '', name + '::' + OUTPUT_TYPE) };\n  out.push({ json: {\n    ...merged,\n    client_name: name,\n    video_base_id: c['Video_Base_ID'],\n    brand_name: c['Brand_Name'] || name,\n    output_type: OUTPUT_TYPE,\n    drive_shared_drive_id: c['Drive_Shared_Drive_ID'] || '',\n    drive_folder_id: o ? (o['Drive_Folder_ID'] || '') : ''\n  } });\n}\nconsole.log('[0b] Clients to process: ' + out.length);\nreturn out;"
+      },
+      "id": "f5aac4fd-ba27-4648-b5cb-285a5bc6f288",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3424,
+        -1280
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "cea56b71-a016-4f66-b4e9-0ef582288530",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3648,
+        -1280
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "cb8cc20d-fff0-4b44-9514-3547778031e1",
+      "name": "0d. All Clients Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3872,
+        -1360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\n// started_at is captured here so the notes block can report how long the run took.\nreturn { json: { ...$input.item.json, cfg, started_at: new Date().toISOString() } };"
+      },
+      "id": "90d96bce-ed91-4188-abf2-00712e138779",
+      "name": "1z. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        -1552
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "5c5c3beb-556e-492c-aeb6-3b2fd3ca2cd5",
+      "name": "6d. Fetch Existing Reel Notes",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        7232,
+        -1552
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Tagged-block write: strip only this stage's block, keep every other stage's notes.\nconst fresh = $input.item.json || {};\nlet d = {};\ntry { d = $('6c. Build Track 2 URL').item.json; } catch (e) {\n  try { d = $('5d. Reuse Track 2 URL').item.json; } catch (e2) { d = {}; }\n}\nconst cfg = d.cfg || {};\nconst g = cfg.bgm || {};\n\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = g.notes_separator || '==============================';\nconst STAGE_TAG = g.stage_tag || 'BGM (WF_BGM)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(STAGE_TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst notesBase = freshNotes.replace(blockRe, '').trim();\n\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('1z. Attach Config').first().json.started_at || '';\n  triggered = raw ? raw.substring(0, 16).replace('T', ' ') : '';\n  const s = Date.parse(raw);\n  if (s) { const secs = Math.max(0, Math.round((Date.now() - s) / 1000)); runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'; }\n} catch (e) {}\n\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + STAGE_TAG\n  + '\\nTriggered: ' + triggered\n  + '\\nUpdated: ' + stamp\n  + '\\nRun time: ' + runtime\n  + '\\nStage: Complete'\n  + '\\nTrack 1: ' + (d.reused_1 ? 'reused from library' : 'generated')\n  + '\\nTrack 2: ' + (d.reused_2 ? 'reused from library' : 'generated')\n  + '\\n' + (d.transition_note || '');\n\nconst notesFinal = (notesBase ? notesBase + '\\n\\n' : '') + block;\n\nreturn { json: { ...d, reel_notes_final: notesFinal, run_time: runtime } };"
+      },
+      "id": "00ce3f73-048a-4b6c-9705-392879850eeb",
+      "name": "6e. Build BGM Notes Block",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7456,
+        -1552
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-44: continue only when Production_Approval is ticked AND Script_Approval = Approved.\n// WF_BGM is field-triggered (no trigger status), so an unapproved record is noted once and then ignored.\nconst items = $input.all();\nconst cfg = (items[0] && items[0].json.cfg) || {};\nconst g = cfg.bgm || {};\nconst sep = g.notes_separator || '==============================';\nconst TAG = g.stage_tag || 'BGM (WF_BGM)';\nconst LINE = 'Not approved: skipped';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp(esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)');\nconst isOk = j => { const sa = j.Script_Approval; const v = (sa && typeof sa === 'object') ? sa.name : sa; return j.Production_Approval === true && v === 'Approved'; };\nconst noted = j => { const m = String(j.Reel_Notes || '').match(re); return !!(m && m[0].includes(LINE)); };\nconst ok = items.filter(i => isOk(i.json));\nconst fresh = items.filter(i => !isOk(i.json) && !noted(i.json));\nif (fresh.length) return fresh.map(i => ({ json: { ...i.json, _route: 'note' } }));\nif (ok.length) return ok.map(i => ({ json: { ...i.json, _route: 'run' } }));\nreturn [{ json: { cfg, _route: 'none' } }];"
+      },
+      "id": "a6ffd4c0-5b54-4ee4-9cc6-9da0d4ba8704",
+      "name": "1g. Approval Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        -1792
+      ],
+      "notes": "T-44: route = run (approved), note (unapproved, note not written yet) or none. One route per pass so the client loop is reached once."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved-check",
+              "leftValue": "={{ $json._route === 'run' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "e31319b8-4148-4098-9a52-6aa59d198086",
+      "name": "1h. Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4544,
+        -1792
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "note-check",
+              "leftValue": "={{ $json._route === 'note' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "f1d1ade1-e303-4301-8b3f-34e17d0ccf9d",
+      "name": "1i. Needs Note?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4768,
+        -1792
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "7ac1b880-e59e-4fd1-9f91-f9ce02231751",
+      "name": "1j. Re-read Notes (Not Approved)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4992,
+        -1792
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// T-44: record is not approved. Rewrite only this workflow's notes block.\nconst fresh = $input.item.json || {};\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nlet cfg = {};\ntry { cfg = $('1z. Attach Config').first().json.cfg || {}; } catch (e) { cfg = {}; }\nconst g = cfg.bgm || {};\nconst sep = g.notes_separator || '==============================';\nconst TAG = g.stage_tag || 'BGM (WF_BGM)';\nconst notes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst base = notes.replace(re, '').trim();\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + TAG + '\\nUpdated: ' + stamp + '\\nStage: Skipped' + '\\nNot approved: skipped';\nreturn { json: { record_id: fresh.id || '', reel_notes_final: (base ? base + '\\n\\n' : '') + block } };"
+      },
+      "id": "8ce63bd7-2aea-43ed-876e-65895cd3fdb7",
+      "name": "1k. Build Skip Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5216,
+        -1792
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "bdae1da3-2561-4862-841e-1beeb691ef06",
+      "name": "1l. Write Not Approved Note",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        5440,
+        -1792
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2. Build BGM Prompt": {
+      "main": [
+        [
+          {
+            "node": "2b. Search Drive Track 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Search Drive Track 1": {
+      "main": [
+        [
+          {
+            "node": "2c. Track 1 Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Track 1 Exists?": {
+      "main": [
+        [
+          {
+            "node": "2d. Reuse Track 1 URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "3. Generate Track 1 (ElevenLabs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2d. Reuse Track 1 URL": {
+      "main": [
+        [
+          {
+            "node": "5b. Search Drive Track 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Generate Track 1 (ElevenLabs)": {
+      "main": [
+        [
+          {
+            "node": "4. Upload Track 1 to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Upload Track 1 to Drive": {
+      "main": [
+        [
+          {
+            "node": "5. Build Track 1 URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Build Track 1 URL": {
+      "main": [
+        [
+          {
+            "node": "5b. Search Drive Track 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Search Drive Track 2": {
+      "main": [
+        [
+          {
+            "node": "5c. Track 2 Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5c. Track 2 Exists?": {
+      "main": [
+        [
+          {
+            "node": "5d. Reuse Track 2 URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "5e. Build Track 2 Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Generate Track 2 (ElevenLabs)": {
+      "main": [
+        [
+          {
+            "node": "6b. Upload Track 2 to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Upload Track 2 to Drive": {
+      "main": [
+        [
+          {
+            "node": "6c. Build Track 2 URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5e. Build Track 2 Body": {
+      "main": [
+        [
+          {
+            "node": "6. Generate Track 2 (ElevenLabs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0a2. Load Client Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a2. Load Client Outputs": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "0d. All Clients Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Records Needing BGM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Records Needing BGM": {
+      "main": [
+        [
+          {
+            "node": "1z. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1z. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "1g. Approval Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Write Both URLs to Airtable": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5d. Reuse Track 2 URL": {
+      "main": [
+        [
+          {
+            "node": "6d. Fetch Existing Reel Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Build Track 2 URL": {
+      "main": [
+        [
+          {
+            "node": "6d. Fetch Existing Reel Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d. Fetch Existing Reel Notes": {
+      "main": [
+        [
+          {
+            "node": "6e. Build BGM Notes Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6e. Build BGM Notes Block": {
+      "main": [
+        [
+          {
+            "node": "7. Write Both URLs to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1g. Approval Gate": {
+      "main": [
+        [
+          {
+            "node": "1h. Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1h. Approved?": {
+      "main": [
+        [
+          {
+            "node": "2. Build BGM Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1i. Needs Note?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1i. Needs Note?": {
+      "main": [
+        [
+          {
+            "node": "1j. Re-read Notes (Not Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1j. Re-read Notes (Not Approved)": {
+      "main": [
+        [
+          {
+            "node": "1k. Build Skip Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1k. Build Skip Notes": {
+      "main": [
+        [
+          {
+            "node": "1l. Write Not Approved Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1l. Write Not Approved Note": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "14993dd6-a56f-4ac6-8eb7-1692be51eebd",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "uOsBZ1FeSyks9bAC",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-02-12T01:13:37.643Z",
+      "createdAt": "2026-02-12T01:13:37.643Z",
+      "id": "L8r5R8kEQXaUFlQO",
+      "name": "AlfredAI Content"
+    }
+  ]
+}

@@ -1,0 +1,1614 @@
+{
+  "name": "WF06s-image - Static Image Generator (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "fa0f0383-438e-4938-a1d7-16fe48b61121",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -21120,
+        -3392
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Status} = 'Ready for Image Generation', NOT({Topic} = ''), {Output_Format} = 'Image')",
+        "options": {}
+      },
+      "id": "7da90458-4fe7-4a8b-91e2-8c79a38dad22",
+      "name": "1. Get Ready Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -20896,
+        -3296
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "14500040-36f8-4869-b490-be89dcd0e669",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -20448,
+        -3568
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item=$input.item.json;\nconst topic=item['Topic']||'';\nconst sourceUrl=item['Source URL']||item['Source_URL']||'';\nconst client=(item['Client']&&typeof item['Client']==='object')?(item['Client'].name||''):(item['Client']||'AlfredAI');\nconst existingNotes=item['Static_Notes']||'';\nconst rawPick=item['Static Skill Picker'];\nconst skillOverride=(typeof rawPick==='string'?rawPick:(rawPick&&rawPick.name)||'').trim();\nconst STAGE_TAG='STATIC (skill)';\nconst sep='==============================';\n// remove any prior block for THIS stage so it self-replaces; keep everything else\nconst blockRe=new RegExp('\\\\n*'+sep+'\\\\n'+STAGE_TAG.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')+'[\\\\s\\\\S]*?(?=(\\\\n'+sep+'\\\\n)|$)','g');\nconst notesBase=existingNotes.replace(blockRe,'').trim();\nreturn{json:{record_id:item.id||'',topic,source_url:sourceUrl,client,notes_base:notesBase,stage_tag:STAGE_TAG,sep,has_link:!!(sourceUrl&&sourceUrl.trim().length>5),skill_override:skillOverride}};"
+      },
+      "id": "fde7fa9e-be10-47b0-a2ac-a3bf01441d34",
+      "name": "3. Extract Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20448,
+        -3376
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "Image Processing"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e381889b-6815-4499-9e3c-e6f1c06e05a8",
+      "name": "4. Mark Processing",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -20224,
+        -3376
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const src=$('3. Extract Record').item.json;\nreturn{json:{...src}};"
+      },
+      "id": "0755c224-6890-4479-b61c-7c9ccf0a2436",
+      "name": "4b. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20000,
+        -3376
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "l1",
+              "leftValue": "={{ $json.has_link }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d285ba81-cda6-4f60-a5ac-cc608fd31562",
+      "name": "5. Has Link?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -19104,
+        -3376
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const MANUS_PROJECT_ID='3c8Tpmj5hWFRdgFS8UHb45';\nconst d=$input.item.json;\nconst folderUrl=d.drive_folder_url||'';\nconst folderId=d.sub_folder_id||'';\nconst fileName=(d.subfolder_name||'conceptual')+'_final.png';\nconst msg='Recreate this LinkedIn post for AlfredAI as a conceptual branded graphic, following your full end-to-end workflow (extract the source post, write original AlfredAI brand-voice copy, generate the conceptual graphic with the brand design system, and composite the logo).\\n\\nIMPORTANT: Generate the conceptual graphic image using Nano Banana Pro (the built-in image generation tool). Use Nano Banana Pro for all image generation in this task.\\n\\nLOGO (mandatory - use the OFFICIAL AlfredAI logo): Composite the official AlfredAI logo asset bundled in your skill (use your composite logo script / logo template). Do NOT generate, redraw, recreate, or approximate the logo with an image model. Do NOT put any black box, dark rectangle, colored panel, or solid shape behind it - it is a transparent wordmark and the graphic must show through around the letters. If it appears low-contrast, the only allowed enhancement is a soft feathered glow, never a filled box.\\n\\nSource LinkedIn post:\\n'+d.source_url+'\\n\\nPRE-SHIP QUALITY CHECK (mandatory - do this BEFORE uploading anything to Google Drive): Before you upload, review the final graphic and the post copy and verify ALL of the following. Do NOT upload until every item passes; if any fails, fix it and re-render first.\\n1. TEXT CORRECTNESS: all on-graphic text and the post copy are accurate, spelled correctly, grammatically clean, and match the intended message. No placeholder text, no cut-off words.\\n2. NO OVERLAP: no text overlaps other text, graphics, the logo, or edges. Everything sits inside safe margins. Nothing is clipped or running off-canvas.\\n3. READABILITY: every text element is legible against its background with strong contrast; headline is the dominant element; nothing too small or crowded.\\n4. GRAPHICS CORRECT: the graphic, colors, and logo are correct, on-brand, not distorted, not duplicated, and relevant to the message. The AlfredAI logo is the official asset, transparent, with no box behind it.\\n5. COMPLETENESS: the final PNG and the post copy are both present.\\nOnly once every check passes, proceed to upload.\\n\\nUPLOAD (MANDATORY - required final step, do not skip it):\\nDESTINATION_FOLDER_ID: '+folderId+'\\nDESTINATION_FOLDER_URL: '+folderUrl+'\\nOUTPUT_FILENAME: '+fileName+'\\n\\nExport the final graphic as a PNG named '+fileName+'. After the quality check passes, upload it to the user\\'s Google Drive using rclone, targeting the EXISTING destination folder by its ID with the flag --drive-root-folder-id '+folderId+' so the PNG lands directly INSIDE that existing folder. The destination is a shared drive, so include shared-drive support. Run the upload EXACTLY ONCE; do not re-run or duplicate. Do NOT create a new folder. Do NOT use the folder ID as a new folder name. Do NOT leave the file only in your task workspace. After uploading, confirm in your task output the exact file you placed in that folder, and provide the post copy.';\nreturn{json:{...d,manus_message:msg,output_filename:fileName,manus_project_id:MANUS_PROJECT_ID}};"
+      },
+      "id": "eb42163a-3ca4-4337-80d9-b50114851c95",
+      "name": "6. Build Manus Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18880,
+        -3472
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/skill.list?project_id={{ $json.manus_project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "058bcec4-f37e-4960-990d-3b4ad06b01e6",
+      "name": "6b. Resolve Skill ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -18656,
+        -3472
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp=$input.item.json||{};\nconst ctx=$('6. Build Manus Message').item.json;\nconst project=ctx.manus_project_id||'(none)';\nconst rec=ctx.record_id||'(no id)';\nif(resp.ok===false||!Array.isArray(resp.data)){throw new Error('skill.list failed for Manus project '+project+' on record '+rec+': '+JSON.stringify(resp).substring(0,300)+'. Nothing submitted.');}\nconst all=resp.data.filter(Boolean);\nconst norm=s=>String(s||'').trim().toLowerCase();\nconst DEFAULT_SKILL='alfredai-conceptual-linkedin-post-creator';\nconst override=String(ctx.skill_override||'').trim();\nconst wanted=override||DEFAULT_SKILL;\nconst source=override?'record override':'default';\nconst projectSkills=all.filter(s=>s.owner_type==='project');\nconst matches=projectSkills.filter(s=>norm(s.name)===norm(wanted));\nif(matches.length!==1||!matches[0].id){\n  const nonProject=all.filter(s=>s.owner_type!=='project'&&norm(s.name)===norm(wanted)).map(s=>(s.owner_type||'unknown')+' '+s.id);\n  let why;\n  if(matches.length>1)why=matches.length+' project skills share this name ('+matches.map(s=>s.id).join(', ')+')';\n  else if(nonProject.length)why='only non-project copies exist ['+nonProject.join(', ')+']; personal, team, official and app skills are not allowed';\n  else why='no project skill with this name';\n  throw new Error('Skill '+wanted+' ('+source+') not resolved for record '+rec+' in Manus project '+project+': '+why+'. Project skills available: '+(projectSkills.map(s=>s.name).join(', ')||'(none)')+'. Nothing submitted.');\n}\nconst hit=matches[0];\nreturn{json:{...ctx,resolved_skill_id:hit.id,resolved_skill_name:hit.name||wanted,resolved_skill_owner_type:hit.owner_type,resolved_skill_source:source,skill_resolve_error:''}};"
+      },
+      "id": "5a286ecc-2e97-4dbb-849b-30d7fea1682c",
+      "name": "6c. Pick Skill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18432,
+        -3472
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.manus.ai/v2/task.create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"content\": [{ \"type\": \"text\", \"text\": {{ JSON.stringify($json.manus_message) }} }],\n    \"enable_skills\": [{{ JSON.stringify($json.resolved_skill_id) }}],\n    \"force_skills\": [{{ JSON.stringify($json.resolved_skill_id) }}]\n  },\n  \"title\": {{ JSON.stringify(($json.topic || \"Static\") + \" - \" + $json.record_id) }},\n  \"project_id\": {{ JSON.stringify($json.manus_project_id) }},\n  \"hide_in_task_list\": false,\n  \"agent_profile\": \"manus-1.6\"\n}",
+        "options": {}
+      },
+      "id": "d9a412c4-3941-4366-b8eb-d64903023368",
+      "name": "7. Submit to Manus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -18208,
+        -3472
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$input.item.json||{};\nconst ctx=$('6c. Pick Skill').item.json;\nconst taskId=r.task_id||(r.data&&r.data.task_id)||'';\nif(!taskId||r.ok===false){throw new Error('Manus task.create failed for record '+(ctx.record_id||'(no id)')+' with skill '+ctx.resolved_skill_name+' ('+ctx.resolved_skill_owner_type+', '+ctx.resolved_skill_id+'): no task_id returned. Response: '+JSON.stringify(r).substring(0,400));}\nreturn{json:{...ctx,manus_task_id:taskId,manus_task_url:r.task_url||('https://manus.im/app/'+taskId),manus_has_task:true,manus_error:''}};"
+      },
+      "id": "08cf8d2a-9808-4470-bcb8-df1711e80fad",
+      "name": "8. Extract Task ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17984,
+        -3472
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Static_Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\nUpdated: ' + $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm') + ' PHT' + '\\nStage: Waiting for Manus' + '\\nDispatched At: ' + $now.toUTC().toISO() + '\\nSkill: ' + $json.resolved_skill_name + ' (' + $json.resolved_skill_owner_type + ', ' + $json.resolved_skill_id + ') via ' + $json.resolved_skill_source + '\\nSource: ' + $json.source_url + '\\nDrive folder: ' + $json.drive_folder_url + '\\nDrive folder ID: ' + $json.sub_folder_id + '\\nExpected files: ' + ($json.output_filename || '') + '\\nManus Task ID: ' + $json.manus_task_id + '\\nManus Task URL: ' + $json.manus_task_url }}",
+            "Status": "Image Processing",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2166dd44-bcd4-4b03-8230-ac754eec7305",
+      "name": "9. Record Dispatch",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -17088,
+        -3296
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "bf2769b2-df72-4ad5-b357-5ed39c62d3ca",
+      "name": "2. Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -20672,
+        -3296
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "Error - Missing Required Fields",
+            "Static_Notes": "Skill-only test: no Source URL on record. Add the LinkedIn post link to Source URL."
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e95c8f69-eed6-4048-9624-83605336e316",
+      "name": "Err. No Link",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -18880,
+        -3280
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "f2ba8ec8-770c-45f3-9c1a-71dc5f5ce080",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -21120,
+        -3200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst recordId=d.record_id||'';\nconst shortId=recordId?recordId.substring(0,7):'norec';\nconst raw=(d.topic||'conceptual').toLowerCase().replace(/[^\\w\\s-]/g,'').replace(/\\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');\nlet slug=raw;\nif(slug.length>40){slug=slug.substring(0,40);const cut=slug.lastIndexOf('-');if(cut>15)slug=slug.substring(0,cut);}\nslug=slug.replace(/^-|-$/g,'')||'conceptual';\nconst genDate=$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd');\nconst subfolderName=genDate+'_'+slug+'_'+shortId;\nreturn{json:{...d,subfolder_name:subfolderName,gen_date:genDate,short_id:shortId}};"
+      },
+      "id": "54a9092b-adbc-48da-90e7-51a581526acc",
+      "name": "4c. Prepare Subfolder Name",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19776,
+        -3376
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.subfolder_name }}\",\n  \"mimeType\": \"application/vnd.google-apps.folder\",\n  \"parents\": [\"1fqCQbDjoGFVG-xJMChUtvJOoUkBY-Qv9\"]\n}",
+        "options": {}
+      },
+      "id": "ce33ea1c-73a3-4773-975d-dda066ada3c5",
+      "name": "4d. Create Drive Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -19552,
+        -3376
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderResp=$input.item.json;\nconst prev=$('4c. Prepare Subfolder Name').item.json;\nconst subFolderId=folderResp.id||'';\nconst driveFolderUrl=subFolderId?`https://drive.google.com/drive/folders/${subFolderId}`:'';\nreturn{json:{...prev,sub_folder_id:subFolderId,drive_folder_url:driveFolderUrl,folder_error:subFolderId?'':'Folder creation failed: '+JSON.stringify(folderResp)}};"
+      },
+      "id": "b3aff4ae-cc69-4e70-ab23-df3760c9f365",
+      "name": "4e. Extract Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19328,
+        -3376
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst B='alfredaiNoteBoundary';\nconst BASE_ID='appqqldSVgwSvRmEi';\nconst TABLE_ID='tblSBKG2Zx2nZUPIT';\nconst recId=d.record_id||'';\nconst atUrl=recId?('https://airtable.com/'+BASE_ID+'/'+TABLE_ID+'/'+recId):'';\nconst lines=[\n'AlfredAI Content Engine - generated asset folder',\n'',\n'Brand: '+(d.client||'AlfredAI'),\n'Content type: Static image',\n'Generated: '+(d.gen_date||'')+' (PHT)',\n'Topic: '+(d.topic||''),\n'Source URL: '+(d.source_url||''),\n'',\n'Airtable record ID: '+recId,\n'Airtable record: '+atUrl,\n'Airtable base: '+BASE_ID,\n'',\n'Expected file: '+(d.output_filename||''),\n'Manus skill: '+(d.resolved_skill_name||''),\n'Manus task ID: '+(d.manus_task_id||''),\n'Manus task URL: '+(d.manus_task_url||''),\n'',\n'Created by the automation engine. The asset is uploaded by Manus after this note is written, so the file may appear shortly after.',\n'Posted vs not-posted is tracked manually in Outputs > Posted / Pending.'\n];\nconst note=lines.join('\\n');\nconst meta=JSON.stringify({name:'00_INFO.txt',parents:[d.sub_folder_id],mimeType:'text/plain'});\nconst multipart='--'+B+'\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n'+meta+'\\r\\n--'+B+'\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n'+note+'\\r\\n--'+B+'--';\nreturn[{json:{...d,note_multipart:multipart}}];"
+      },
+      "id": "abc4c9dc-399d-49fa-acfb-5dec65922567",
+      "name": "8h. Build Folder Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17760,
+        -3472
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "multipart/related; boundary=alfredaiNoteBoundary",
+        "body": "={{ $json.note_multipart }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "10317435-9abd-44c7-9f48-6267923c209f",
+      "name": "8i. Write Folder Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -17536,
+        -3472
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx=$('8h. Build Folder Note').item.json;\nconst {note_multipart,...rest}=ctx;\nreturn{json:rest};"
+      },
+      "id": "6ce09413-b9be-47ba-9cc4-02907a330c13",
+      "name": "8j. Restore After Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17312,
+        -3472
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let ctx;\ntry{ctx=$('4e. Extract Folder ID').item.json;}catch(e){ctx=$('4e. Extract Folder ID').last().json;}\nconst e=$input.item.json||{};\nconst raw=e.error;\nconst reason=String(typeof raw==='string'?raw:(raw&&(raw.message||raw.description))||JSON.stringify(e)).substring(0,1500);\nlet skill='';\ntry{const p=$('6c. Pick Skill').item.json;if(p&&p.resolved_skill_id)skill=p.resolved_skill_name+' ('+p.resolved_skill_owner_type+', '+p.resolved_skill_id+')';}catch(err){}\nconst sy=$now.setZone('Australia/Sydney');\nconst ts=sy.toFormat('yyyy-MM-dd HH:mm')+' '+(sy.offset===660?'AEDT':'AEST')+' / '+$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm')+' PHT';\nconst lines=[ctx.sep,ctx.stage_tag,'Updated: '+ts,'FAILED - Manus task not created; record not marked ready.','Reason: '+reason];\nif(skill)lines.push('Skill: '+skill);\nlines.push('Source: '+(ctx.source_url||''),'Drive folder: '+(ctx.drive_folder_url||''));\nconst notes=(ctx.notes_base?ctx.notes_base+'\\n\\n':'')+lines.join('\\n');\nreturn{json:{record_id:ctx.record_id,failure_reason:reason,failure_skill:skill,failure_notes:notes,cfg:ctx.cfg}};"
+      },
+      "id": "4720aea8-4ff7-4386-84b5-d299ffb9a33e",
+      "name": "Err. Build Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17984,
+        -3184
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Notes": "={{ $json.failure_notes }}",
+            "Status": "Error - Image Generation Failed",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "474a8e55-51e9-4bdd-bc3b-6b024ed16605",
+      "name": "Err. Manus Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -17760,
+        -3184
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved",
+              "leftValue": "={{ $json.Production_Approval === true }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "829bd96f-34f2-4d73-9e08-d04ad61f567c",
+      "name": "2b. Production Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -20560,
+        -3120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "28c3f69f-710c-4a93-ab8b-c62d705547c8",
+      "name": "2c. Re-read Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -20336,
+        -2960
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw=$input.item.json||{};\nconst rec=raw.fields?{...raw.fields,id:raw.id}:raw;\nconst src=$('2b. Production Approved?').item.json;\nconst TAG='STATIC (skill)';\nconst sep='==============================';\nconst esc=TAG.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst re=new RegExp('\\\\n*'+sep+'\\\\n'+esc+'[\\\\s\\\\S]*?(?=(\\\\n'+sep+'\\\\n)|$)','g');\nconst base=String(rec['Static_Notes']||'').replace(re,'').trim();\nconst sy=$now.setZone('Australia/Sydney');\nconst ts=sy.toFormat('yyyy-MM-dd HH:mm')+' '+(sy.offset===660?'AEDT':'AEST')+' / '+$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm')+' PHT';\nconst block=[sep,TAG,ts+' - Not generated: Production_Approval not ticked. Sent back to Idea.'].join('\\n');\nreturn{json:{record_id:rec.id||src.id,notes:(base?base+'\\n\\n':'')+block}};"
+      },
+      "id": "4ef6a9fa-8e02-4d0e-af5b-22c7d6d67881",
+      "name": "2d. Build Idea Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20112,
+        -2960
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Notes": "={{ $json.notes }}",
+            "Status": "Idea",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "21ab22d8-cc8f-49a1-8b6a-b81fab3e8d4a",
+      "name": "2e. Back to Idea",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -19888,
+        -2960
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d=$input.item.json;\nconst tail='\\n\\nFINAL OUTPUT FORMAT (mandatory - overrides any other instruction about how to end your task output): After the upload has finished, end the task with ONE final message that contains ONLY a single JSON object - no other text before or after it and no code fences. Use exactly these keys:\\n{\"status\":\"done\",\"files\":[\"every file name you uploaded, exactly as named in Drive\"],\"caption\":\"the full post copy or caption, or an empty string if there is none\",\"notes\":\"anything the team should know, or an empty string\"}\\nIf you could not finish the job or the upload, send the same JSON object with \"status\":\"failed\" and put the reason in \"notes\". Never end with a question instead of this message.';\nreturn{json:{...d,manus_message:String(d.manus_message||'')+tail}};"
+      },
+      "id": "885aae7a-2d7a-4efe-8091-60f4848b85fa",
+      "name": "6d. Append Output Contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18320,
+        -3680
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "2f6c69d9-e4c3-467d-bcb3-ac4ebd356899",
+      "name": "P0. Every 2 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -21120,
+        -2608
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Status} = 'Image Processing', {Output_Format} = 'Image')",
+        "options": {}
+      },
+      "id": "bb9338cd-40f7-43fc-a292-eb8bc84721e8",
+      "name": "P3. Get Processing Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -20896,
+        -2608
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const NOTES_FIELD='Static_Notes';\nconst TAG='STATIC (skill)';\nconst SEP='==============================';\nconst cfg={static_base_id:'appqqldSVgwSvRmEi'};\nconst esc=s=>String(s).replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst out=[];\nfor(const it of $input.all()){\n  const r=it.json||{};\n  if(!r.id)continue;\n  const m=String(r[NOTES_FIELD]||'').match(new RegExp(esc(SEP)+'\\n'+esc(TAG)+'\\n([^]*?)(?=\\n'+esc(SEP)+'\\n|$)'));\n  if(!m||!/^Stage: Waiting for Manus$/m.test(m[1]))continue;\n  const block=m[1];\n  const g=k=>{const x=block.match(new RegExp('^'+esc(k)+': *(.*)$','m'));return x?x[1].trim():'';};\n  const taskId=g('Manus Task ID');\n  const folderId=g('Drive folder ID');\n  if(!taskId||!folderId)continue;\n  const at=Date.parse(g('Dispatched At'));\n  out.push({json:{record_id:r.id,cfg,stage_tag:TAG,manus_task_id:taskId,manus_task_url:g('Manus Task URL'),drive_folder_id:folderId,drive_folder_url:g('Drive folder')||('https://drive.google.com/drive/folders/'+folderId),expected_files:g('Expected files').split(',').map(s=>s.trim()).filter(Boolean),skill_line:g('Skill'),source_line:g('Source'),elapsed_min:at?Math.round((Date.now()-at)/60000):0}});\n}\nreturn out;"
+      },
+      "id": "038e169f-cc0b-4f75-8f0a-b545c4f0d9d8",
+      "name": "P4. Parse Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20672,
+        -2608
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/task.listMessages?task_id={{ encodeURIComponent($json.manus_task_id) }}&order=desc&limit=30",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e1be8c44-59cd-4c82-8d8f-dc0ad91b50fe",
+      "name": "P5. List Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -20448,
+        -2608
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=200&fields=files(id,name,mimeType)&q={{ encodeURIComponent(\"'\" + $('P4. Parse Dispatch').item.json.drive_folder_id + \"' in parents and trashed = false\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "72c870c0-a300-481e-86e6-751a35817ef2",
+      "name": "P6. List Drive Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -20224,
+        -2608
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const TIMEOUT_MIN=30;\nconst KIND='image';\nconst ctx=$('P4. Parse Dispatch').item.json;\nconst mr=$('P5. List Messages').item.json||{};\nconst dr=$input.item.json||{};\nconst msgs=Array.isArray(mr.messages)?mr.messages:[];\nlet agent='',waitWhy='',errText='';\nfor(const m of msgs){\n  if(!m)continue;\n  if(!agent&&m.status_update&&m.status_update.agent_status){agent=String(m.status_update.agent_status).toLowerCase();const sd=m.status_update.status_detail||{};waitWhy=String(sd.waiting_description||sd.waiting_for_event_type||'');}\n  if(!errText&&m.error_message&&m.error_message.content){errText=String(m.error_message.content).substring(0,300);}\n}\nconst parse=s=>{const t=String(s||'').replace(/```[a-zA-Z]*/g,'').trim();const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)return null;try{const o=JSON.parse(t.slice(a,b+1));return(o&&typeof o==='object'&&!Array.isArray(o)&&typeof o.status==='string'&&Array.isArray(o.files))?o:null;}catch(e){return null;}};\nlet result=null;\nfor(const m of msgs){const c=m&&m.assistant_message&&m.assistant_message.content;if(typeof c==='string'&&c.trim()){result=parse(c);if(result)break;}}\nconst errMsg=e=>e?String((e&&e.message)||JSON.stringify(e)).substring(0,150):'';\nconst files=Array.isArray(dr.files)?dr.files:[];\nconst names=files.map(f=>(f&&f.name)||'').filter(n=>n&&n!=='00_INFO.txt');\nconst cnt=re=>names.filter(n=>re.test(n)).length;\nconst png=cnt(/\\.png$/i),pdf=cnt(/\\.pdf$/i),svg=cnt(/\\.svg$/i);\nconst exp=Array.isArray(ctx.expected_files)?ctx.expected_files:[];\nconst missing=exp.filter(n=>names.indexOf(n)===-1);\nlet driveOk=false;\nif(KIND==='image')driveOk=png>=Math.max(1,exp.length);\nelse if(KIND==='carousel')driveOk=pdf>=1&&png>=1;\nelse if(KIND==='infographic')driveOk=png>=1;\nelse if(KIND==='ebook')driveOk=pdf>=1;\nelse if(KIND==='posts')driveOk=png>=3;\nconst driveSummary=names.length+' file(s): '+png+' PNG, '+pdf+' PDF, '+svg+' SVG'+(missing.length?'; missing by name: '+missing.join(', '):'')+(dr.error?'; Drive list failed: '+errMsg(dr.error):'');\nconst jsonOk=!!result&&result.status.trim().toLowerCase()==='done';\nconst jsonSummary=result?('status '+result.status+', '+result.files.length+' file(s) listed'+(result.notes?', notes: '+String(result.notes).substring(0,300):'')):('no parseable JSON'+(agent?' (agent status: '+agent+')':'')+(mr.error?'; listMessages failed: '+errMsg(mr.error):''));\nlet state='wait',reason='';\nif(jsonOk&&driveOk){state='ready';}\nelse if(agent==='error'){state='error';reason='Manus task errored'+(errText?': '+errText:'');}\nelse if(agent==='waiting'){state='error';reason='Manus is waiting for input'+(waitWhy?' ('+waitWhy+')':'')+'. Answer or stop the task in Manus.';}\nelse if(result&&!jsonOk){state='error';reason='Manus reported status '+result.status+(result.notes?': '+String(result.notes).substring(0,300):'');}\nelse if(ctx.elapsed_min>=TIMEOUT_MIN){state='error';reason='Timed out after '+ctx.elapsed_min+' min ('+(result?'JSON result read':'no parseable JSON result')+', '+(driveOk?'files present':'files incomplete')+')';}\nreturn{json:{...ctx,state,reason,drive_ok:driveOk,json_ok:jsonOk,drive_summary:driveSummary,json_summary:jsonSummary,agent_status:agent}};"
+      },
+      "id": "f1cd8943-7aa1-4866-9e94-74ec69159eba",
+      "name": "P7. Evaluate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20000,
+        -2608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "fin",
+              "leftValue": "={{ $json.state }}",
+              "operator": {
+                "operation": "notEquals",
+                "type": "string"
+              },
+              "rightValue": "wait"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "3151cf0c-dbc9-4908-831a-e4e7d389026c",
+      "name": "P8. Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -19776,
+        -2608
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "d28e6671-8679-44ad-be78-81ab1bb27d28",
+      "name": "P9. Re-read Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -19552,
+        -2608
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const NOTES_FIELD='Static_Notes';\nconst PROC='Image Processing';\nconst SEP='==============================';\nconst esc=s=>String(s).replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst sy=$now.setZone('Australia/Sydney');\nconst ts=sy.toFormat('yyyy-MM-dd HH:mm')+' '+(sy.offset===660?'AEDT':'AEST')+' / '+$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm')+' PHT';\nconst items=$input.all();\nconst out=[];\nfor(let i=0;i<items.length;i++){\n  const raw=items[i].json||{};\n  const rec=raw.fields?{...raw.fields,id:raw.id}:raw;\n  let ctx=null;\n  try{ctx=$('P7. Evaluate').itemMatching(i).json;}catch(e){ctx=null;}\n  if(!ctx||!rec.id)continue;\n  const st=(rec.Status&&typeof rec.Status==='object')?rec.Status.name:rec.Status;\n  const notes=String(rec[NOTES_FIELD]||'');\n  const cur=notes.match(new RegExp(esc(SEP)+'\\n'+esc(ctx.stage_tag)+'\\n([^]*?)(?=\\n'+esc(SEP)+'\\n|$)'));\n  if(st!==PROC||!cur||!/^Stage: Waiting for Manus$/m.test(cur[1])||cur[1].indexOf('Manus Task ID: '+ctx.manus_task_id)===-1)continue;\n  const base=notes.replace(new RegExp('\\n*'+esc(SEP)+'\\n'+esc(ctx.stage_tag)+'\\n[^]*?(?=\\n'+esc(SEP)+'\\n|$)','g'),'').trim();\n  const lines=[SEP,ctx.stage_tag,'Updated: '+ts,ctx.state==='ready'?'Stage: Ready - Manus JSON result read and files verified in Drive':'Stage: Error - '+ctx.reason,'Skill: '+ctx.skill_line,'Source: '+ctx.source_line,'Drive folder: '+ctx.drive_folder_url,'Files in Drive: '+ctx.drive_summary,'Manus result: '+ctx.json_summary,'Run time: '+ctx.elapsed_min+' min','Manus Task ID: '+ctx.manus_task_id,'Manus Task URL: '+ctx.manus_task_url];\n  out.push({json:{record_id:rec.id,cfg:ctx.cfg,state:ctx.state,drive_folder_url:ctx.drive_folder_url,final_notes:(base?base+'\\n\\n':'')+lines.join('\\n')}});\n}\nreturn out;"
+      },
+      "id": "fac793bc-d806-4b4d-b5be-c9c5b28fc6ed",
+      "name": "P10. Build Final Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19328,
+        -2608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "rdy",
+              "leftValue": "={{ $json.state }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "ready"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "0b482e41-1b79-426f-8c39-3820adc2e9fa",
+      "name": "P11. Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -19104,
+        -2608
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Asset_URL": "={{ $json.drive_folder_url }}",
+            "Static_Notes": "={{ $json.final_notes }}",
+            "Status": "Image Ready",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "35f3bf01-5c5b-430c-9850-136ea439f330",
+      "name": "P12. Mark Image Ready",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -18880,
+        -2704
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appqqldSVgwSvRmEi"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Notes": "={{ $json.final_notes }}",
+            "Status": "Error - Image Generation Failed",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "49f6b00c-d7c8-48f9-b2ca-d75e3e422944",
+      "name": "P12e. Mark Error",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -18880,
+        -2496
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Every 1 Minute": [
+      {
+        "json": {
+          "timestamp": "2026-09-23T23:12:54.003-04:00",
+          "Readable date": "September 23rd 2026, 11:12:54 pm",
+          "Readable time": "11:12:54 pm",
+          "Day of week": "Wednesday",
+          "Year": "2026",
+          "Month": "September",
+          "Day of month": "23",
+          "Hour": "23",
+          "Minute": "12",
+          "Second": "54",
+          "Timezone": "America/New_York (UTC-04:00)"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "1. Get Ready Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready Records": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Extract Record": {
+      "main": [
+        [
+          {
+            "node": "4. Mark Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Mark Processing": {
+      "main": [
+        [
+          {
+            "node": "4b. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4c. Prepare Subfolder Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Has Link?": {
+      "main": [
+        [
+          {
+            "node": "6. Build Manus Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. No Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Build Manus Message": {
+      "main": [
+        [
+          {
+            "node": "6b. Resolve Skill ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Resolve Skill ID": {
+      "main": [
+        [
+          {
+            "node": "6c. Pick Skill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Pick Skill": {
+      "main": [
+        [
+          {
+            "node": "6d. Append Output Contract",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Submit to Manus": {
+      "main": [
+        [
+          {
+            "node": "8. Extract Task ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Batch of 1": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2b. Production Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. No Link": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. Get Ready Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Prepare Subfolder Name": {
+      "main": [
+        [
+          {
+            "node": "4d. Create Drive Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Create Drive Subfolder": {
+      "main": [
+        [
+          {
+            "node": "4e. Extract Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Extract Folder ID": {
+      "main": [
+        [
+          {
+            "node": "5. Has Link?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Extract Task ID": {
+      "main": [
+        [
+          {
+            "node": "8h. Build Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8h. Build Folder Note": {
+      "main": [
+        [
+          {
+            "node": "8i. Write Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8i. Write Folder Note": {
+      "main": [
+        [
+          {
+            "node": "8j. Restore After Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8j. Restore After Note": {
+      "main": [
+        [
+          {
+            "node": "9. Record Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. Build Failure": {
+      "main": [
+        [
+          {
+            "node": "Err. Manus Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. Manus Failed": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Production Approved?": {
+      "main": [
+        [
+          {
+            "node": "3. Extract Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2c. Re-read Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Re-read Record": {
+      "main": [
+        [
+          {
+            "node": "2d. Build Idea Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2d. Build Idea Note": {
+      "main": [
+        [
+          {
+            "node": "2e. Back to Idea",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2e. Back to Idea": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Record Dispatch": {
+      "main": [
+        [
+          {
+            "node": "2. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d. Append Output Contract": {
+      "main": [
+        [
+          {
+            "node": "7. Submit to Manus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P0. Every 2 Minutes": {
+      "main": [
+        [
+          {
+            "node": "P3. Get Processing Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P3. Get Processing Records": {
+      "main": [
+        [
+          {
+            "node": "P4. Parse Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P4. Parse Dispatch": {
+      "main": [
+        [
+          {
+            "node": "P5. List Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P5. List Messages": {
+      "main": [
+        [
+          {
+            "node": "P6. List Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P6. List Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "P7. Evaluate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P7. Evaluate": {
+      "main": [
+        [
+          {
+            "node": "P8. Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P8. Finished?": {
+      "main": [
+        [
+          {
+            "node": "P9. Re-read Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P9. Re-read Record": {
+      "main": [
+        [
+          {
+            "node": "P10. Build Final Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P10. Build Final Notes": {
+      "main": [
+        [
+          {
+            "node": "P11. Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P11. Ready?": {
+      "main": [
+        [
+          {
+            "node": "P12. Mark Image Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "P12e. Mark Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "timezone": "Australia/Sydney"
+  },
+  "versionId": "9af11a11-b039-4e34-98e5-9e663dd8f50b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "TecilSR0iJkE3WJB",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-02-12T01:13:37.643Z",
+      "createdAt": "2026-02-12T01:13:37.643Z",
+      "id": "L8r5R8kEQXaUFlQO",
+      "name": "AlfredAI Content"
+    }
+  ]
+}

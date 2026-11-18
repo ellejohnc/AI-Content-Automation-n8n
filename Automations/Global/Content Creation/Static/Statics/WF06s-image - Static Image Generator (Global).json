@@ -1,0 +1,1875 @@
+{
+  "name": "WF06s-image - Static Image Generator (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "27fbc96f-e2b4-40e5-ad2b-b18bd35550fc",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -21120,
+        -3232
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Status} = 'Ready for Image Generation', NOT({Topic} = ''), {Output_Format} = 'Image')",
+        "options": {}
+      },
+      "id": "bcfe57b6-623a-4350-91c4-c1a855521dbc",
+      "name": "1. Get Ready Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -20000,
+        -3456
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "0e1b8915-4dd1-403d-b6d3-d7b486593677",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -20000,
+        -3648
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item=$input.item.json;\nconst cfg=item.__cfg||{};\nif(!cfg.static_base_id||!cfg.manus_project_id||!cfg.skill_name){throw new Error('Client config missing on record '+(item.id||'(no id)')+'. Aborting rather than submitting to the wrong client.');}\nconst topic=item['Topic']||'';\nconst sourceUrl=(item['Source URL']||item['Source_URL']||'').trim();\nconst m=sourceUrl.match(/^[a-z][a-z0-9+.-]*:\\/\\/([^\\/?#:]+)/i);\nconst sourceDomain=m?m[1].replace(/^www\\./i,''):'';\nconst existingNotes=item['Static_Notes']||'';\nconst STAGE_TAG=cfg.notes_stage_tag||'STATIC (skill)';\nconst sep='==============================';\nconst blockRe=new RegExp('\\\\n*'+sep+'\\\\n'+STAGE_TAG.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')+'[\\\\s\\\\S]*?(?=(\\\\n'+sep+'\\\\n)|$)','g');\nconst notesBase=existingNotes.replace(blockRe,'').trim();\nreturn{json:{record_id:item.id||'',topic,source_url:sourceUrl,source_domain:sourceDomain,client:cfg.client_name||'',notes_base:notesBase,stage_tag:STAGE_TAG,sep,has_link:!!(sourceUrl&&sourceUrl.length>5),cfg}};"
+      },
+      "id": "d26c436e-bde1-416d-9980-78c996492c16",
+      "name": "3. Extract Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19328,
+        -3456
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Status": "Image Processing",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "6147cb01-a12a-4e24-9d4c-74c890f9b5fc",
+      "name": "4. Mark Processing",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -19104,
+        -3456
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const src=$('3. Extract Record').item.json;\nreturn{json:{...src}};"
+      },
+      "id": "3e1ccd3c-8e77-4a0e-a4c9-9c22d6c9e0b1",
+      "name": "4b. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18880,
+        -3456
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "l1",
+              "leftValue": "={{ $json.has_link }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "31c049b0-1dd8-45da-999d-726907480fba",
+      "name": "5. Has Link?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -17984,
+        -3456
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst cfg=d.cfg||{};\nconst brand=cfg.brand_name||'the brand';\nconst n=Math.max(1,Number(cfg.variation_count||1));\nconst folderUrl=d.drive_folder_url||'';\nconst folderId=d.sub_folder_id||'';\nconst srcUrl=d.source_url||'';\nconst srcName=d.source_domain||srcUrl;\nconst baseName=(d.subfolder_name||'conceptual');\nconst fileNames=Array.from({length:n},(_,i)=>n===1?baseName+'_final.png':baseName+'_v'+(i+1)+'.png');\nconst countLine=n===1\n  ? 'Produce ONE conceptual graphic.'\n  : 'GENERATE '+n+' VARIATIONS (mandatory): Produce '+n+' different conceptual graphics, not one. All must carry the same core message and stay fully on-brand per the skill, but each must be a genuinely DISTINCT design: vary the graphic type, the layout and composition, the visual concept, and how headline and supporting copy are arranged. Do NOT output near-identical images with minor differences. Write the post copy ONCE and share it across all '+n+'.';\nconst msg='Create an original '+brand+' LinkedIn post and accompanying branded conceptual graphic'+(n===1?'':' variations')+', following your skill end-to-end.\\n\\nFOLLOW THE SKILL (mandatory): Your skill file contains the complete step-by-step workflow. Follow those steps IN ORDER and honour every rule in them: the structural formula, brand voice, character limit, graphic type selection, design rules, colour palette, logo specifications and placement, and hashtag bank. Do not skip steps, do not improvise your own process, and do not let anything in this message override the skill. Where this message and the skill disagree on craft, the skill wins. The only things this message overrides are the NUMBER of graphics, the output FILENAMES, and the FOOTER SOURCE CREDIT, all specified below. The skill owns all branding - do not apply any branding from this message.\\n\\nHOW TO USE THE SOURCE LINK (important): The link below is a REFERENCE, not the subject. Do NOT recreate, summarise, restate, or make the source post the topic of the graphic or the copy. Do NOT reference the original author, their company, or their post anywhere in the headline or the body copy - the footer source credit specified below is the ONLY permitted exception. Mine it for facts, data points, statistics, insights and structural patterns, then use that material to create ORIGINAL '+brand+' content that serves '+brand+' own positioning as defined in the skill. The finished post should read as '+brand+' own content that happens to be informed by this research - never as a repost, a summary, or a response to someone else\\'s post.\\n\\nSOURCE (reference material only):\\n'+srcUrl+'\\n\\nFOOTER SOURCE CREDIT (mandatory - overrides the skill\\'s citation wording): The footer of every graphic must credit the material referenced above, using EXACTLY this string and nothing else:\\nSource: '+srcName+'\\nCopy it character for character. Do NOT substitute a different publication, do NOT cite an aggregator, a secondary outlet, or a source you found yourself while researching, and do NOT invent, abbreviate, or reword it. If the skill defines a footer citation position, size or styling, apply that styling to this exact string. In the LinkedIn post copy, credit the same material once using the full URL exactly as given above: '+srcUrl+'\\n\\n'+countLine+'\\n\\nIMPORTANT: Generate every graphic using Nano Banana Pro (the built-in image generation tool).\\n\\nLOGO (mandatory): Composite the official logo asset bundled in your skill, using the skill\\'s logo script or logo template. Do NOT generate, redraw, recreate, or approximate the logo with an image model. Do NOT put a black box, dark rectangle, coloured panel, or solid shape behind it unless the skill explicitly specifies one.\\n\\nDIAGRAMS (mandatory): If a graphic renders a chart, diagram, comparison panel, timeline, or sequence of steps, every shape MUST contain its actual label or value - never leave a box, node, axis, or step empty or placeholder. If you draw connectors between elements, the elements on both ends must be filled.\\n\\nPRE-SHIP QUALITY CHECK (mandatory - BEFORE uploading anything): Review every graphic and the post copy and verify ALL of the following for EACH image. Do NOT upload until every item passes; if any fails, fix it and re-render first.\\n1. ORIGINAL SUBJECT: original '+brand+' messaging informed by the source, not a recreation or summary of it. No mention of the original author or their company anywhere outside the footer credit.\\n2. SKILL STEPS FOLLOWED: every step in the skill applied in order.\\n3. COPY RULES: within the character limit stated in the skill, fully paraphrased, no phrasing lifted from the source, no hype language, ends with a curiosity question or soft CTA. Hashtags drawn from the skill hashtag bank.\\n4. FOOTER CREDIT EXACT: the footer reads exactly \"Source: '+srcName+'\" - same spelling, same characters, no other publication named, nothing added or dropped. The post copy carries the full URL '+srcUrl+' exactly as given.\\n5. CITATIONS VERIFIED: every data claim is backed by the referenced material or another credible source, and no claim is attributed to a source that was not actually used.\\n6. LOGO CORRECT: official logo asset, placed per the skill, not distorted, not duplicated, no stray wordmark anywhere.\\n7. TEXT CORRECTNESS: all on-graphic text and post copy accurate, correctly spelled, grammatically clean. No placeholder text, no cut-off words.\\n8. NO OVERLAP: no text overlaps other text, graphics, the logo, or edges. Everything inside safe margins, nothing clipped. The footer credit must not be clipped or overlapped.\\n9. READABILITY: every text element legible with strong contrast; headline dominant; nothing too small or crowded. The footer credit must be legible, not faded into the background.\\n10. GRAPHICS CORRECT: colours match the skill palette, nothing distorted or duplicated, each graphic relevant to the message.\\n11. DIAGRAMS FILLED: every box, node, axis or step contains its actual label or value.\\n'+(n===1?'':'12. DISTINCT: the images are genuinely different designs, not near-duplicates.\\n')+'Only once every check passes, proceed to upload.\\n\\nUPLOAD (MANDATORY - read every rule, follow exactly):\\nDESTINATION_FOLDER_ID: '+folderId+'\\nDESTINATION_FOLDER_URL: '+folderUrl+'\\nOUTPUT_FILENAMES: '+fileNames.join(', ')+'\\n\\nUpload ONLY the final composited graphics, named EXACTLY: '+fileNames.join(', ')+'. Do NOT upload intermediates.\\n\\nUPLOAD RULES - these prevent duplicate files and stray folders, follow them literally:\\n- Run the upload ONE TIME ONLY, as a SINGLE command transferring all files at once. Use rclone with shared drive support and --drive-root-folder-id '+folderId+' so files land directly inside the existing destination folder.\\n- The destination folder ALREADY EXISTS. Do NOT create a folder. Do NOT pass any filename as a destination folder name. The destination must be the folder root, never a path ending in a .png name.\\n- Use ONE tool for the upload. Do NOT fall back to a second method. If rclone reports success, the upload is DONE.\\n- Do NOT verify by listing the folder, and do NOT re-upload if a listing appears empty or stale. Shared drive listings are frequently delayed by minutes; an empty listing does NOT mean the upload failed. Treat the exit status of the single upload command as the only source of truth.\\n- Only if the upload command itself returns a non-zero exit status or an explicit error, retry once - and before retrying, delete any partial files or stray folders it created.\\n- The destination folder must end up containing EXACTLY '+fileNames.length+' PNG file(s) and ZERO subfolders. If you find a folder named like a .png file, delete it.\\n\\nAfter the single upload, confirm in your task output the exact list of filenames you transferred, the exact footer credit string you rendered, and provide the post copy.';\nreturn{json:{...d,manus_message:msg,output_filename:fileNames[0],output_filenames:fileNames}};"
+      },
+      "id": "4e745088-3e01-4133-8567-566fcfcc34b2",
+      "name": "6. Build Manus Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17760,
+        -3552
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/skill.list?project_id={{ $json.cfg.manus_project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "cab82dc0-ea3d-48e6-9635-28367bae0e76",
+      "name": "6b. Resolve Skill ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -17536,
+        -3552
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp=$input.item.json||{};\nconst ctx=$('6. Build Manus Message').item.json;\nconst cfg=ctx.cfg||{};\nconst project=cfg.manus_project_id||'(none)';\nconst client=cfg.client_name||'(unknown)';\nconst rec=ctx.record_id||'(no id)';\nif(resp.ok===false||!Array.isArray(resp.data)){throw new Error('skill.list failed for client '+client+', Manus project '+project+', record '+rec+': '+JSON.stringify(resp).substring(0,300)+'. Nothing submitted.');}\nconst all=resp.data.filter(Boolean);\nconst norm=s=>String(s||'').trim().toLowerCase();\nconst wantedList=[cfg.skill_name].concat(String(cfg.skill_fallback||'').split(',')).map(s=>String(s||'').trim()).filter(Boolean);\nif(!wantedList.length){throw new Error('No Skill_Name configured for client '+client+'. Nothing submitted.');}\nconst projectSkills=all.filter(s=>s.owner_type==='project');\nlet hit=null,source='';\nconst misses=[];\nfor(let i=0;i<wantedList.length;i++){\n  const w=wantedList[i];\n  const m=projectSkills.filter(s=>norm(s.name)===norm(w));\n  if(m.length>1){throw new Error('Skill '+w+' is ambiguous for client '+client+' in Manus project '+project+' (record '+rec+'): '+m.length+' project skills share this name ('+m.map(s=>s.id).join(', ')+'). Nothing submitted.');}\n  if(m.length===1&&m[0].id){hit=m[0];source=i===0?'client config':'client config fallback';break;}\n  const np=all.filter(s=>s.owner_type!=='project'&&norm(s.name)===norm(w)).map(s=>(s.owner_type||'unknown')+' '+s.id);\n  misses.push(w+': '+(np.length?'only non-project copies ['+np.join(', ')+']':'no project skill with this name'));\n}\nif(!hit){throw new Error('Skill not resolved for client '+client+', record '+rec+', Manus project '+project+': '+misses.join('; ')+'. Personal, team, official and app skills are not allowed. Project skills available: '+(projectSkills.map(s=>s.name).join(', ')||'(none)')+'. Nothing submitted.');}\nreturn{json:{...ctx,resolved_skill_id:hit.id,resolved_skill_name:hit.name||'',resolved_skill_owner_type:hit.owner_type,resolved_skill_source:source,skill_resolve_error:''}};"
+      },
+      "id": "99a47772-cda1-4f22-b531-4a4a6af70d04",
+      "name": "6c. Pick Skill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17312,
+        -3552
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.manus.ai/v2/task.create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"content\": [{ \"type\": \"text\", \"text\": {{ JSON.stringify($json.manus_message) }} }],\n    \"enable_skills\": [{{ JSON.stringify($json.resolved_skill_id) }}],\n    \"force_skills\": [{{ JSON.stringify($json.resolved_skill_id) }}]\n  },\n  \"title\": {{ JSON.stringify(($json.topic || \"Static\") + \" - \" + $json.record_id) }},\n  \"project_id\": {{ JSON.stringify($json.cfg.manus_project_id) }},\n  \"hide_in_task_list\": false,\n  \"agent_profile\": \"manus-1.6\"\n}",
+        "options": {}
+      },
+      "id": "e3353bb3-9dbb-4a21-9aff-bd3e062791f6",
+      "name": "7. Submit to Manus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -17088,
+        -3552
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$input.item.json||{};\nconst ctx=$('6c. Pick Skill').item.json;\nconst taskId=r.task_id||(r.data&&r.data.task_id)||'';\nif(!taskId||r.ok===false){throw new Error('Manus task.create failed for record '+(ctx.record_id||'(no id)')+' with skill '+ctx.resolved_skill_name+' ('+ctx.resolved_skill_owner_type+', '+ctx.resolved_skill_id+'): no task_id returned. Response: '+JSON.stringify(r).substring(0,400));}\nreturn{json:{...ctx,manus_task_id:taskId,manus_task_url:r.task_url||('https://manus.im/app/'+taskId),manus_has_task:true,manus_error:''}};"
+      },
+      "id": "d3b10cab-9a00-43ea-ad28-b4c87f56620f",
+      "name": "8. Extract Task ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16864,
+        -3552
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Static_Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\nUpdated: ' + $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm') + ' PHT' + '\\nStage: Waiting for Manus' + '\\nDispatched At: ' + $now.toUTC().toISO() + '\\nSkill: ' + $json.resolved_skill_name + ' (' + $json.resolved_skill_owner_type + ', ' + $json.resolved_skill_id + ') via ' + $json.resolved_skill_source + '\\nSource: ' + $json.source_url + '\\nDrive folder: ' + $json.drive_folder_url + '\\nDrive folder ID: ' + $json.sub_folder_id + '\\nExpected files: ' + ($json.output_filenames || []).join(', ') + '\\nManus Task ID: ' + $json.manus_task_id + '\\nManus Task URL: ' + $json.manus_task_url }}",
+            "Status": "Image Processing",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fe1dd784-cab1-4c67-ab33-829be0fa7071",
+      "name": "9. Record Dispatch",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -15072,
+        -3376
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "Error - Missing Required Fields",
+            "Static_Notes": "Skill-only test: no Source URL on record. Add the LinkedIn post link to Source URL."
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "74577458-ae52-40c8-8577-a4184f773b2d",
+      "name": "Err. No Link",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -17760,
+        -3328
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "737b3ae1-4da3-4a6c-9fb1-2589d5e493b7",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -21120,
+        -3040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst recordId=d.record_id||'';\nconst shortId=recordId?recordId.substring(0,7):'norec';\nconst raw=(d.topic||'conceptual').toLowerCase().replace(/[^\\w\\s-]/g,'').replace(/\\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');\nlet slug=raw;\nif(slug.length>40){slug=slug.substring(0,40);const cut=slug.lastIndexOf('-');if(cut>15)slug=slug.substring(0,cut);}\nslug=slug.replace(/^-|-$/g,'')||'conceptual';\nconst genDate=$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd');\nconst subfolderName=genDate+'_'+slug+'_'+shortId;\nreturn{json:{...d,subfolder_name:subfolderName,gen_date:genDate,short_id:shortId}};"
+      },
+      "id": "9928d59f-a52c-44e8-89bf-2e9a6131e8dd",
+      "name": "4c. Prepare Subfolder Name",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18656,
+        -3456
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": {{ JSON.stringify($json.subfolder_name) }},\n  \"mimeType\": \"application/vnd.google-apps.folder\",\n  \"parents\": [{{ JSON.stringify($json.cfg.drive_folder_id) }}]\n}",
+        "options": {}
+      },
+      "id": "3600593d-941d-43fb-ba24-e085ec63fa87",
+      "name": "4d. Create Drive Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -18432,
+        -3456
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderResp=$input.item.json;\nconst prev=$('4c. Prepare Subfolder Name').item.json;\nconst subFolderId=folderResp.id||'';\nconst driveFolderUrl=subFolderId?`https://drive.google.com/drive/folders/${subFolderId}`:'';\nreturn{json:{...prev,sub_folder_id:subFolderId,drive_folder_url:driveFolderUrl,folder_error:subFolderId?'':'Folder creation failed: '+JSON.stringify(folderResp)}};"
+      },
+      "id": "e67ec938-0077-4fbe-8170-50df6b1bf525",
+      "name": "4e. Extract Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18208,
+        -3456
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Static_Enabled})",
+        "options": {}
+      },
+      "id": "3389491f-4656-4789-bb95-f9b244112644",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -20896,
+        -3136
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "AND({Output_Type}='image', {Enabled})",
+        "options": {}
+      },
+      "id": "49ad3155-118a-4343-9c65-45d6054f9a06",
+      "name": "0b. Load Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -20672,
+        -3136
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'image';\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outputs = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Static_Enabled'] !== true) continue;\n  const row = outputs.find(o => o['Key'] === name + '::' + OUTPUT_TYPE);\n  if (!row) continue;\n  if (row['Enabled'] !== true) continue;\n  if (!c['Static_Base_ID'] || !row['Drive_Folder_ID'] || !row['Manus_Project_ID'] || !row['Skill_Name']) continue;\n  out.push({ json: {\n    client_name: name,\n    static_base_id: c['Static_Base_ID'],\n    drive_shared_drive_id: c['Drive_Shared_Drive_ID'] || '',\n    brand_name: c['Brand_Name'] || name,\n    notes_stage_tag: c['Notes_Stage_Tag'] || 'STATIC (skill)',\n    variation_count: Math.max(1, Number(c['Variation_Count'] || 1)),\n    drive_folder_id: row['Drive_Folder_ID'],\n    manus_project_id: row['Manus_Project_ID'],\n    skill_name: row['Skill_Name'],\n    skill_fallback: row['Skill_Fallback'] || ''\n  }});\n}\nreturn out;"
+      },
+      "id": "e6ae99c7-1645-468f-82c1-b56ec827fdc0",
+      "name": "0c. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20448,
+        -3136
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resolve the client config for THIS loop iteration.\n// Do not use .first() - it returns run 0 and mislabels every later client.\nconst loop = $('0d. Client Loop');\nlet cfg = null;\ntry {\n  cfg = loop.item.json;\n} catch (e) {\n  cfg = null;\n}\nif (!cfg || !cfg.static_base_id) {\n  throw new Error('Could not resolve client config for this iteration. Refusing to run with the wrong client.');\n}\nreturn [{ json: { ...$input.item.json, __cfg: cfg } }];"
+      },
+      "id": "b5244dbb-7513-4061-8fd2-7852c8890f76",
+      "name": "1b. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19552,
+        -3456
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "dd18bbf1-dfc2-42ba-bf78-dc73ca54df36",
+      "name": "0d. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -20224,
+        -3136
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "15b9c1df-0f8d-4bd4-8bbe-04f0a828ee43",
+      "name": "1a. Has Records?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -19776,
+        -3456
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst cfg=d.cfg||{};\nconst B='alfredaiNoteBoundary';\nconst TABLE_ID='tblSBKG2Zx2nZUPIT';\nconst baseId=cfg.static_base_id||'';\nconst recId=d.record_id||'';\nconst atUrl=(baseId&&recId)?('https://airtable.com/'+baseId+'/'+TABLE_ID+'/'+recId):'';\nconst files=Array.isArray(d.output_filenames)?d.output_filenames:[];\nconst lines=[\n'AlfredAI Content Engine - generated asset folder',\n'',\n'Brand: '+(cfg.brand_name||cfg.client_name||''),\n'Content type: Static image',\n'Generated: '+(d.gen_date||'')+' (PHT)',\n'Topic: '+(d.topic||''),\n'Source URL: '+(d.source_url||''),\n'',\n'Airtable record ID: '+recId,\n'Airtable record: '+atUrl,\n'Airtable base: '+baseId,\n'',\n'Expected files: '+files.length,\nfiles.map(n=>'  - '+n).join('\\n'),\n'',\n'Manus skill: '+(d.resolved_skill_name||''),\n'Manus task ID: '+(d.manus_task_id||''),\n'Manus task URL: '+(d.manus_task_url||''),\n'',\n'Created by the automation engine. Manus uploads the files after this note is written; the record turns Image Ready only once they are verified in this folder.',\n'Posted vs not-posted is tracked manually in Outputs > Posted / Pending.'\n];\nconst note=lines.join('\\n');\nconst meta=JSON.stringify({name:'00_INFO.txt',parents:[d.sub_folder_id],mimeType:'text/plain'});\nconst multipart='--'+B+'\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n'+meta+'\\r\\n--'+B+'\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n'+note+'\\r\\n--'+B+'--';\nreturn[{json:{...d,note_multipart:multipart}}];"
+      },
+      "id": "b3d6153c-2234-4cc6-9f70-d1fc7a2faac0",
+      "name": "8h. Build Folder Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15744,
+        -3808
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "multipart/related; boundary=alfredaiNoteBoundary",
+        "body": "={{ $json.note_multipart }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ff38afc4-a883-4beb-9753-351d00e7f45c",
+      "name": "8i. Write Folder Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -15520,
+        -3808
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx=$('8h. Build Folder Note').item.json;\nconst {note_multipart,...rest}=ctx;\nreturn{json:rest};"
+      },
+      "id": "faf85153-f2a0-47e0-be5b-3789d5d9eb0b",
+      "name": "8j. Restore After Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15296,
+        -3808
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let ctx;\ntry{ctx=$('4e. Extract Folder ID').item.json;}catch(e){ctx=$('4e. Extract Folder ID').last().json;}\nconst e=$input.item.json||{};\nconst raw=e.error;\nconst reason=String(typeof raw==='string'?raw:(raw&&(raw.message||raw.description))||JSON.stringify(e)).substring(0,1500);\nlet skill='';\ntry{const p=$('6c. Pick Skill').item.json;if(p&&p.resolved_skill_id)skill=p.resolved_skill_name+' ('+p.resolved_skill_owner_type+', '+p.resolved_skill_id+')';}catch(err){}\nconst sy=$now.setZone('Australia/Sydney');\nconst ts=sy.toFormat('yyyy-MM-dd HH:mm')+' '+(sy.offset===660?'AEDT':'AEST')+' / '+$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm')+' PHT';\nconst lines=[ctx.sep,ctx.stage_tag,'Updated: '+ts,'FAILED - Manus task not created; record not marked ready.','Reason: '+reason];\nif(skill)lines.push('Skill: '+skill);\nlines.push('Source: '+(ctx.source_url||''),'Drive folder: '+(ctx.drive_folder_url||''));\nconst notes=(ctx.notes_base?ctx.notes_base+'\\n\\n':'')+lines.join('\\n');\nreturn{json:{record_id:ctx.record_id,failure_reason:reason,failure_skill:skill,failure_notes:notes,cfg:ctx.cfg}};"
+      },
+      "id": "0b4e38c6-7379-4c05-bde4-73e48847c1bb",
+      "name": "Err. Build Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16864,
+        -3264
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Notes": "={{ $json.failure_notes }}",
+            "Status": "Error - Image Generation Failed",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "342915ef-2090-479c-9b7f-38394cb33c8c",
+      "name": "Err. Manus Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -16640,
+        -3264
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved",
+              "leftValue": "={{ $json.Production_Approval === true }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "8e3ed3cd-680f-49ca-9f61-7eb7d9ba3394",
+      "name": "1c. Production Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -19440,
+        -3200
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.__cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "0be59064-c83f-49ba-a15a-aad4d0bf497a",
+      "name": "1d. Re-read Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -19216,
+        -3008
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw=$input.item.json||{};\nconst rec=raw.fields?{...raw.fields,id:raw.id}:raw;\nconst src=$('1c. Production Approved?').item.json;\nconst cfg=src.__cfg||{};\nconst TAG=cfg.notes_stage_tag||'STATIC (skill)';\nconst sep='==============================';\nconst esc=TAG.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst re=new RegExp('\\\\n*'+sep+'\\\\n'+esc+'[\\\\s\\\\S]*?(?=(\\\\n'+sep+'\\\\n)|$)','g');\nconst base=String(rec['Static_Notes']||'').replace(re,'').trim();\nconst sy=$now.setZone('Australia/Sydney');\nconst ts=sy.toFormat('yyyy-MM-dd HH:mm')+' '+(sy.offset===660?'AEDT':'AEST')+' / '+$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm')+' PHT';\nconst block=[sep,TAG,ts+' - Not generated: Production_Approval not ticked. Sent back to Idea.'].join('\\n');\nreturn{json:{record_id:rec.id||src.id,notes:(base?base+'\\n\\n':'')+block,cfg}};"
+      },
+      "id": "c5868443-335a-4095-90f2-44df7ce86d8a",
+      "name": "1e. Build Idea Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18992,
+        -3008
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Notes": "={{ $json.notes }}",
+            "Status": "Idea",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a475dedb-6a58-47e7-acaa-e5018a788996",
+      "name": "1f. Back to Idea",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -18768,
+        -3008
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d=$input.item.json;\nconst tail='\\n\\nFINAL OUTPUT FORMAT (mandatory - overrides any other instruction about how to end your task output): After the upload has finished, end the task with ONE final message that contains ONLY a single JSON object - no other text before or after it and no code fences. Use exactly these keys:\\n{\"status\":\"done\",\"files\":[\"every file name you uploaded, exactly as named in Drive\"],\"caption\":\"the full post copy or caption, or an empty string if there is none\",\"notes\":\"anything the team should know, or an empty string\"}\\nIf you could not finish the job or the upload, send the same JSON object with \"status\":\"failed\" and put the reason in \"notes\". Never end with a question instead of this message.';\nreturn{json:{...d,manus_message:String(d.manus_message||'')+tail}};"
+      },
+      "id": "06b27e6a-b29c-4bc4-8520-f1775f7c30f8",
+      "name": "6d. Append Output Contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17200,
+        -3760
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "1d3c5f78-74fa-4e3f-94dd-9c3a3d72dd51",
+      "name": "P0. Every 2 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -21120,
+        -2704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Static_Enabled})",
+        "options": {}
+      },
+      "id": "cfd3b212-fdd3-4f9d-9592-164676d6c7ab",
+      "name": "P1. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -20896,
+        -2704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const TYPES=['image'];\nconst clients=$('P1. Load Clients').all().map(i=>i.json);\nconst outputs=$input.all().map(i=>i.json);\nconst seen={};\nconst out=[];\nfor(const c of clients){\n  const name=c['Client_Name'];\n  const base=c['Static_Base_ID'];\n  if(!name||c['Static_Enabled']!==true||!base||seen[base])continue;\n  if(!outputs.some(o=>TYPES.some(t=>o['Key']===name+'::'+t)))continue;\n  seen[base]=true;\n  out.push({json:{client_name:name,static_base_id:base,notes_stage_tag:c['Notes_Stage_Tag']||'STATIC (skill)'}});\n}\nreturn out;"
+      },
+      "id": "1c8d582a-b542-460d-96aa-e8e5fb73b8cd",
+      "name": "P2. Build Poll Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20672,
+        -2704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Status} = 'Image Processing', {Output_Format} = 'Image')",
+        "options": {}
+      },
+      "id": "90073316-25ef-431f-82d0-468d0ddb5589",
+      "name": "P3. Get Processing Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -20448,
+        -2704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const NOTES_FIELD='Static_Notes';\nconst DEFAULT_TAG='STATIC (skill)';\nconst SEP='==============================';\nconst esc=s=>String(s).replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst items=$input.all();\nconst out=[];\nfor(let i=0;i<items.length;i++){\n  const r=items[i].json||{};\n  if(!r.id)continue;\n  let cfg=null;\n  try{cfg=$('P2. Build Poll Config').itemMatching(i).json;}catch(e){cfg=null;}\n  if(!cfg||!cfg.static_base_id)continue;\n  const tag=cfg.notes_stage_tag||DEFAULT_TAG;\n  const m=String(r[NOTES_FIELD]||'').match(new RegExp(esc(SEP)+'\\n'+esc(tag)+'\\n([^]*?)(?=\\n'+esc(SEP)+'\\n|$)'));\n  if(!m||!/^Stage: Waiting for Manus$/m.test(m[1]))continue;\n  const block=m[1];\n  const g=k=>{const x=block.match(new RegExp('^'+esc(k)+': *(.*)$','m'));return x?x[1].trim():'';};\n  const taskId=g('Manus Task ID');\n  const folderId=g('Drive folder ID');\n  if(!taskId||!folderId)continue;\n  const at=Date.parse(g('Dispatched At'));\n  out.push({json:{record_id:r.id,cfg,stage_tag:tag,manus_task_id:taskId,manus_task_url:g('Manus Task URL'),drive_folder_id:folderId,drive_folder_url:g('Drive folder')||('https://drive.google.com/drive/folders/'+folderId),expected_files:g('Expected files').split(',').map(s=>s.trim()).filter(Boolean),skill_line:g('Skill'),source_line:g('Source'),elapsed_min:at?Math.round((Date.now()-at)/60000):0}});\n}\nreturn out;"
+      },
+      "id": "6cd731a9-765d-44c5-90d4-8f0083516bc3",
+      "name": "P4. Parse Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20224,
+        -2704
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/task.listMessages?task_id={{ encodeURIComponent($json.manus_task_id) }}&order=desc&limit=30",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "990c3626-7df4-40c3-b01d-37126fdebc7a",
+      "name": "P5. List Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -20000,
+        -2704
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=200&fields=files(id,name,mimeType)&q={{ encodeURIComponent(\"'\" + $('P4. Parse Dispatch').item.json.drive_folder_id + \"' in parents and trashed = false\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "0e78d037-b5c0-4575-b66a-53174237d2ab",
+      "name": "P6. List Drive Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -19776,
+        -2704
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const TIMEOUT_MIN=30;\nconst KIND='image';\nconst ctx=$('P4. Parse Dispatch').item.json;\nconst mr=$('P5. List Messages').item.json||{};\nconst dr=$input.item.json||{};\nconst msgs=Array.isArray(mr.messages)?mr.messages:[];\nlet agent='',waitWhy='',errText='';\nfor(const m of msgs){\n  if(!m)continue;\n  if(!agent&&m.status_update&&m.status_update.agent_status){agent=String(m.status_update.agent_status).toLowerCase();const sd=m.status_update.status_detail||{};waitWhy=String(sd.waiting_description||sd.waiting_for_event_type||'');}\n  if(!errText&&m.error_message&&m.error_message.content){errText=String(m.error_message.content).substring(0,300);}\n}\nconst parse=s=>{const t=String(s||'').replace(/```[a-zA-Z]*/g,'').trim();const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)return null;try{const o=JSON.parse(t.slice(a,b+1));return(o&&typeof o==='object'&&!Array.isArray(o)&&typeof o.status==='string'&&Array.isArray(o.files))?o:null;}catch(e){return null;}};\nlet result=null;\nfor(const m of msgs){const c=m&&m.assistant_message&&m.assistant_message.content;if(typeof c==='string'&&c.trim()){result=parse(c);if(result)break;}}\nconst errMsg=e=>e?String((e&&e.message)||JSON.stringify(e)).substring(0,150):'';\nconst files=Array.isArray(dr.files)?dr.files:[];\nconst names=files.map(f=>(f&&f.name)||'').filter(n=>n&&n!=='00_INFO.txt');\nconst cnt=re=>names.filter(n=>re.test(n)).length;\nconst png=cnt(/\\.png$/i),pdf=cnt(/\\.pdf$/i),svg=cnt(/\\.svg$/i);\nconst exp=Array.isArray(ctx.expected_files)?ctx.expected_files:[];\nconst missing=exp.filter(n=>names.indexOf(n)===-1);\nlet driveOk=false;\nif(KIND==='image')driveOk=png>=Math.max(1,exp.length);\nelse if(KIND==='carousel')driveOk=pdf>=1&&png>=1;\nelse if(KIND==='infographic')driveOk=png>=1;\nelse if(KIND==='ebook')driveOk=pdf>=1;\nelse if(KIND==='posts')driveOk=png>=3;\nconst driveSummary=names.length+' file(s): '+png+' PNG, '+pdf+' PDF, '+svg+' SVG'+(missing.length?'; missing by name: '+missing.join(', '):'')+(dr.error?'; Drive list failed: '+errMsg(dr.error):'');\nconst jsonOk=!!result&&result.status.trim().toLowerCase()==='done';\nconst jsonSummary=result?('status '+result.status+', '+result.files.length+' file(s) listed'+(result.notes?', notes: '+String(result.notes).substring(0,300):'')):('no parseable JSON'+(agent?' (agent status: '+agent+')':'')+(mr.error?'; listMessages failed: '+errMsg(mr.error):''));\nlet state='wait',reason='';\nif(jsonOk&&driveOk){state='ready';}\nelse if(agent==='error'){state='error';reason='Manus task errored'+(errText?': '+errText:'');}\nelse if(agent==='waiting'){state='error';reason='Manus is waiting for input'+(waitWhy?' ('+waitWhy+')':'')+'. Answer or stop the task in Manus.';}\nelse if(result&&!jsonOk){state='error';reason='Manus reported status '+result.status+(result.notes?': '+String(result.notes).substring(0,300):'');}\nelse if(ctx.elapsed_min>=TIMEOUT_MIN){state='error';reason='Timed out after '+ctx.elapsed_min+' min ('+(result?'JSON result read':'no parseable JSON result')+', '+(driveOk?'files present':'files incomplete')+')';}\nreturn{json:{...ctx,state,reason,drive_ok:driveOk,json_ok:jsonOk,drive_summary:driveSummary,json_summary:jsonSummary,agent_status:agent}};"
+      },
+      "id": "ecacab43-a150-4218-aa7d-dc8c58b2b96d",
+      "name": "P7. Evaluate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19552,
+        -2704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "fin",
+              "leftValue": "={{ $json.state }}",
+              "operator": {
+                "operation": "notEquals",
+                "type": "string"
+              },
+              "rightValue": "wait"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "603e3459-b0c9-431d-b26d-52af40aff876",
+      "name": "P8. Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -19328,
+        -2704
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "a8a46f77-f005-4f3b-a07e-7507417a7626",
+      "name": "P9. Re-read Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -19104,
+        -2704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const NOTES_FIELD='Static_Notes';\nconst PROC='Image Processing';\nconst SEP='==============================';\nconst esc=s=>String(s).replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst sy=$now.setZone('Australia/Sydney');\nconst ts=sy.toFormat('yyyy-MM-dd HH:mm')+' '+(sy.offset===660?'AEDT':'AEST')+' / '+$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm')+' PHT';\nconst items=$input.all();\nconst out=[];\nfor(let i=0;i<items.length;i++){\n  const raw=items[i].json||{};\n  const rec=raw.fields?{...raw.fields,id:raw.id}:raw;\n  let ctx=null;\n  try{ctx=$('P7. Evaluate').itemMatching(i).json;}catch(e){ctx=null;}\n  if(!ctx||!rec.id)continue;\n  const st=(rec.Status&&typeof rec.Status==='object')?rec.Status.name:rec.Status;\n  const notes=String(rec[NOTES_FIELD]||'');\n  const cur=notes.match(new RegExp(esc(SEP)+'\\n'+esc(ctx.stage_tag)+'\\n([^]*?)(?=\\n'+esc(SEP)+'\\n|$)'));\n  if(st!==PROC||!cur||!/^Stage: Waiting for Manus$/m.test(cur[1])||cur[1].indexOf('Manus Task ID: '+ctx.manus_task_id)===-1)continue;\n  const base=notes.replace(new RegExp('\\n*'+esc(SEP)+'\\n'+esc(ctx.stage_tag)+'\\n[^]*?(?=\\n'+esc(SEP)+'\\n|$)','g'),'').trim();\n  const lines=[SEP,ctx.stage_tag,'Updated: '+ts,ctx.state==='ready'?'Stage: Ready - Manus JSON result read and files verified in Drive':'Stage: Error - '+ctx.reason,'Skill: '+ctx.skill_line,'Source: '+ctx.source_line,'Drive folder: '+ctx.drive_folder_url,'Files in Drive: '+ctx.drive_summary,'Manus result: '+ctx.json_summary,'Run time: '+ctx.elapsed_min+' min','Manus Task ID: '+ctx.manus_task_id,'Manus Task URL: '+ctx.manus_task_url];\n  out.push({json:{record_id:rec.id,cfg:ctx.cfg,state:ctx.state,drive_folder_url:ctx.drive_folder_url,final_notes:(base?base+'\\n\\n':'')+lines.join('\\n')}});\n}\nreturn out;"
+      },
+      "id": "72e0e243-cd14-406e-ad45-d83e2ee4bedd",
+      "name": "P10. Build Final Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18880,
+        -2704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "rdy",
+              "leftValue": "={{ $json.state }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "ready"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "7533e962-b645-4807-85ad-819e753321f4",
+      "name": "P11. Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -18656,
+        -2704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Asset_URL": "={{ $json.drive_folder_url }}",
+            "Static_Notes": "={{ $json.final_notes }}",
+            "Status": "Image Ready",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "015117d9-7c58-40e3-8e9a-61bf416b5c50",
+      "name": "P12. Mark Image Ready",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -18432,
+        -2800
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Static_Notes": "={{ $json.final_notes }}",
+            "Status": "Error - Image Generation Failed",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "2234d15d-3c67-48fa-99af-b4711acfd0a1",
+      "name": "P12e. Mark Error",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -18432,
+        -2608
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Output_Type}='image'",
+        "options": {}
+      },
+      "id": "35d4ab0a-e719-4423-aa92-e258f157cdbc",
+      "name": "P1b. Load Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -20784,
+        -2560
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "3. Extract Record": {
+      "main": [
+        [
+          {
+            "node": "4. Mark Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Mark Processing": {
+      "main": [
+        [
+          {
+            "node": "4b. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4c. Prepare Subfolder Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Has Link?": {
+      "main": [
+        [
+          {
+            "node": "6. Build Manus Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. No Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Build Manus Message": {
+      "main": [
+        [
+          {
+            "node": "6b. Resolve Skill ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Resolve Skill ID": {
+      "main": [
+        [
+          {
+            "node": "6c. Pick Skill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Pick Skill": {
+      "main": [
+        [
+          {
+            "node": "6d. Append Output Contract",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Submit to Manus": {
+      "main": [
+        [
+          {
+            "node": "8. Extract Task ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Prepare Subfolder Name": {
+      "main": [
+        [
+          {
+            "node": "4d. Create Drive Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Create Drive Subfolder": {
+      "main": [
+        [
+          {
+            "node": "4e. Extract Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Extract Folder ID": {
+      "main": [
+        [
+          {
+            "node": "5. Has Link?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Load Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Load Outputs": {
+      "main": [
+        [
+          {
+            "node": "0c. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0d. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Ready Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready Records": {
+      "main": [
+        [
+          {
+            "node": "1a. Has Records?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1a. Has Records?": {
+      "main": [
+        [
+          {
+            "node": "1b. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. No Link": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Extract Task ID": {
+      "main": [
+        [
+          {
+            "node": "8h. Build Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8h. Build Folder Note": {
+      "main": [
+        [
+          {
+            "node": "8i. Write Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8i. Write Folder Note": {
+      "main": [
+        [
+          {
+            "node": "8j. Restore After Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8j. Restore After Note": {
+      "main": [
+        [
+          {
+            "node": "9. Record Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. Build Failure": {
+      "main": [
+        [
+          {
+            "node": "Err. Manus Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. Manus Failed": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1c. Production Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Production Approved?": {
+      "main": [
+        [
+          {
+            "node": "3. Extract Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1d. Re-read Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d. Re-read Record": {
+      "main": [
+        [
+          {
+            "node": "1e. Build Idea Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1e. Build Idea Note": {
+      "main": [
+        [
+          {
+            "node": "1f. Back to Idea",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1f. Back to Idea": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Record Dispatch": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d. Append Output Contract": {
+      "main": [
+        [
+          {
+            "node": "7. Submit to Manus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P0. Every 2 Minutes": {
+      "main": [
+        [
+          {
+            "node": "P1. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P2. Build Poll Config": {
+      "main": [
+        [
+          {
+            "node": "P3. Get Processing Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P3. Get Processing Records": {
+      "main": [
+        [
+          {
+            "node": "P4. Parse Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P4. Parse Dispatch": {
+      "main": [
+        [
+          {
+            "node": "P5. List Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P5. List Messages": {
+      "main": [
+        [
+          {
+            "node": "P6. List Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P6. List Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "P7. Evaluate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P7. Evaluate": {
+      "main": [
+        [
+          {
+            "node": "P8. Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P8. Finished?": {
+      "main": [
+        [
+          {
+            "node": "P9. Re-read Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P9. Re-read Record": {
+      "main": [
+        [
+          {
+            "node": "P10. Build Final Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P10. Build Final Notes": {
+      "main": [
+        [
+          {
+            "node": "P11. Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P11. Ready?": {
+      "main": [
+        [
+          {
+            "node": "P12. Mark Image Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "P12e. Mark Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P1. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "P1b. Load Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P1b. Load Outputs": {
+      "main": [
+        [
+          {
+            "node": "P2. Build Poll Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "timezone": "Australia/Sydney"
+  },
+  "versionId": "7a63fd21-dafd-4678-bc98-0d35ab2c9b43",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "62qDTfKUoEmm5AXl",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

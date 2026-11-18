@@ -1,0 +1,2540 @@
+{
+  "name": "WF06d - B-Roll Generator (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "c5afcedc-6c41-4c52-bc63-5dc1e93852e9",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -31600,
+        -4304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Status} = 'Ready for B-roll Generation', NOT({Script} = ''))",
+        "returnAll": false,
+        "limit": 1,
+        "options": {}
+      },
+      "id": "f438ebcd-92e9-4883-864c-a4a61d629c80",
+      "name": "1. Get Ready for B-Roll Generation",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -30480,
+        -4800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "77a8e222-f77e-4a8d-b746-5cb2ad2e010b",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -31600,
+        -4496
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3e4db7ee-70cb-4579-95b3-033e6163db26",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -30480,
+        -4992
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\nconst cfg = item.cfg || {};\nconst b = cfg.broll || {};\nconst rawTopic = item['Topic'] || '';\nconst fullId = item.id || '';\nconst shortId = fullId ? fullId.substring(0, 7) : 'norec';\nlet slug = rawTopic.toLowerCase().replace(/[^\\w\\s-]/g, '').replace(/\\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');\nif (slug.length > 40) { slug = slug.substring(0, 40); const cut = slug.lastIndexOf('-'); if (cut > 15) slug = slug.substring(0, cut); }\nslug = slug.replace(/^-|-$/g, '') || 'broll';\nconst genDate = $now.setZone(cfg.timezone || 'Asia/Manila').toFormat('yyyy-MM-dd');\nconst folderName = genDate + '_' + slug + '_' + shortId;\nconst ratio = item['Ratio'] || '';\nconst ratioText = ratio === 'Portrait' ? 'vertical 9:16 portrait format' : 'horizontal 16:9 landscape format';\nconst aspectRatio = ratio === 'Portrait' ? '9:16' : '16:9';\n\nconst sep = b.notes_separator || '==============================';\nconst NOTES_TAG = b.stage_tag || 'B-ROLL (Manus skill)';\nconst REF_TAG = b.ref_tag || 'B-ROLL CLIP INDEX (Manus skill)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = (tag) => new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(tag) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\n\nconst notesBase = (item['Reel_Notes'] || '').replace(blockRe(NOTES_TAG), '').trim();\nconst refBase = (item['BRoll_Reference'] || '').replace(blockRe(REF_TAG), '').trim();\n\nreturn { json: {\n  cfg: cfg,\n  record_id: fullId,\n  topic: rawTopic,\n  folder_name: folderName,\n  gen_date: genDate,\n  short_id: shortId,\n  script: item['Script'] || '',\n  category: item['Category'] || 'General',\n  broll_generated: item['BRoll_Generated'] || '',\n  broll_reference: refBase,\n  sep: sep,\n  stage_tag: NOTES_TAG,\n  ref_tag: REF_TAG,\n  notes_base: notesBase,\n  ratio: ratio,\n  ratio_text: ratioText,\n  aspect_ratio: aspectRatio\n} };"
+      },
+      "id": "225963c0-3423-460a-910b-207cde9ca92d",
+      "name": "2. Extract Record Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -29808,
+        -4800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ratio-check",
+              "leftValue": "={{ $json.ratio }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "10f7db1e-f730-4ffb-a2e7-4863edd539fa",
+      "name": "2b. Has Ratio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -29584,
+        -4800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "parse-ok",
+              "leftValue": "={{ $json.parse_ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c9eb051d-19d5-4ba8-8877-d8e8d2320b76",
+      "name": "4b. Has Valid Scenes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -29136,
+        -4896
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"name\": {{ JSON.stringify($json.folder_name) }}, \"mimeType\": \"application/vnd.google-apps.folder\", \"parents\": [{{ JSON.stringify((($json.cfg || {}).broll || {}).drive_parent_folder_id || ($json.cfg || {}).drive_folder_id || '') }}] }",
+        "options": {}
+      },
+      "id": "fb5970ce-6efe-467c-8295-39fc6ea84ac1",
+      "name": "4d. Create Drive Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -28912,
+        -4992
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const folderResponse = $input.item.json;\nconst ctx = $('3. Build Scenes from Brief').item.json;\nconst folderId = folderResponse.id || '';\nconst folderLink = folderId ? 'https://drive.google.com/drive/folders/' + folderId : '';\nreturn { json: { ...ctx, folder_id: folderId, folder_link: folderLink, folder_ok: !!folderId } };"
+      },
+      "id": "5375e4f2-2dec-40a9-b9ac-5bedca2c876d",
+      "name": "4e. Store Folder + Scenes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -28688,
+        -4992
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "BRoll_URL": "={{ $json.folder_link }}",
+            "Reel_Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\nUpdated: ' + $now.toFormat('yyyy-MM-dd HH:mm') + '\\nStage: Dispatched to Manus' + '\\nScenes: ' + $json.scene_count + '\\nDrive folder: ' + $json.folder_link }}",
+            "Status": "B-Roll Processing",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "330c64b6-b2a4-445f-ba52-40a97f93fc7c",
+      "name": "4f. Mark B-Roll Processing",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -28464,
+        -4992
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('4e. Store Folder + Scenes').item.json;\nreturn { json: { ...ctx, manus_error: ctx.folder_ok ? '' : 'Drive folder was not created, so nothing was sent to Manus.' } };"
+      },
+      "id": "4c995505-b759-4771-8307-a6305c8420d7",
+      "name": "4g. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -28240,
+        -4992
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\nconst cfg = d.cfg || {};\nconst b = cfg.broll || {};\nconst BRAND = cfg.brand_name || cfg.client_name || 'the brand';\nconst folderId = d.folder_id || '';\nconst folderUrl = d.folder_link || '';\nconst aspect = d.aspect_ratio || '16:9';\nconst scenePayload = d.scenes.map(s => ({\n  id: s.id,\n  file_name: s.file_name,\n  scene_direction: s.scene_direction,\n  style_reference: s.style_reference,\n  duration_seconds: s.duration_seconds,\n  timing_start: s.timing_start,\n  timing_end: s.timing_end,\n  chain_from_previous: s.chain_from_previous === true\n}));\nconst chained = scenePayload.filter(s => s.chain_from_previous).map(s => s.id);\nconst M = [];\nM.push('Render the complete B-roll clip set for one ' + BRAND + ' reel, then upload every clip to Google Drive. Follow every instruction below exactly.');\nM.push('');\nM.push('NON-INTERACTIVE - READ THIS FIRST: This task was dispatched automatically by n8n. There is no human in this session and no one will answer a question. Do NOT ask clarifying questions. Do NOT wait for confirmation. Do NOT present options and pause. Skip the skill clarifying-questions step entirely. Duration, aspect ratio and timing are fixed per scene in the payload below. Everything else - narrative role, visual style, metaphor, palette, mood - is yours to decide from your own skill references. Proceed straight to generation. If something is genuinely missing, note it in your task output and continue - never stall.');\nM.push('');\nM.push('GENERATOR: Use the standard Manus generation tools - generate_image for keyframes and generate_video for clips. Do NOT use Higgsfield for this task. Higgsfield is out of scope for automated b-roll and its credits are reserved for manual, highly customised work.');\nM.push('');\nM.push('BATCH: This is a full clip set, not a single scene. Render ALL ' + d.scene_count + ' scenes below in one task. Do not stop after the first scene.');\nM.push('');\nM.push('ASPECT RATIO: ' + aspect + '. Every keyframe and every clip must be this aspect ratio. No letterboxing, no padding, no cropping after the fact.');\nM.push('');\nM.push('SCENES (from the approved production brief for this video):');\nM.push(JSON.stringify(scenePayload, null, 2));\nM.push('');\nM.push('YOUR JOB - EVERYTHING CREATIVE. The payload gives you content and timing only. Your skill references are the SOLE authority on all of the following, and none of it is specified above:');\nM.push('1. NARRATIVE ROLE. Read each scene_direction and assign it the best-fitting narrative role from your own scene-type table. Do not ask which role to use - decide it yourself from the direction and the position of the scene in the sequence.');\nM.push('2. VISUAL STYLE. Decide abstract or realistic per scene according to your own style rules for the role you assigned.');\nM.push('3. VISUAL METAPHOR. Select the metaphor from your scene-type templates that best fits the role and the direction. Do not default to the same metaphor across scenes.');\nM.push('4. BRAND. Palette, colour values, lighting and visual treatment all come from your brand-assets reference. The payload deliberately omits them.');\nM.push('5. PROMPT STRUCTURE. Apply your documented video prompt structure and technical specs.');\nM.push('');\nM.push('scene_direction is what must actually happen in the clip and is specific to this script - honour it. style_reference is the stock-footage style note from the same brief, use it as a visual hint only. Render each scene for its duration_seconds value, not your default.');\nM.push('');\nM.push('KEYFRAMES AND MOTION (mandatory):');\nM.push('1. Every scene is its own distinct shot unless it has chain_from_previous = true. ' + (chained.length ? 'Chained scenes in this set: ' + chained.join(', ') + '. Every other scene is unchained.' : 'No scene in this set is chained, so every scene is unchained.'));\nM.push('2. For every unchained scene, call generate_image twice at aspect ratio ' + aspect + ' - a first keyframe and a last keyframe - both composed from the scene_direction of that same scene. Then call generate_video with keyframes.first and keyframes.last set and generate_audio false.');\nM.push('3. The first and last keyframe of a scene show the same subject and setting, with the camera in a clearly different position or the subject in a clearly different state, so the clip moves across its whole length: push-in, pull-out, pan, orbit, tracking shot, or the subject carrying out the action in scene_direction. Never pair two unrelated images as first and last keyframe - that renders a held frame followed by a late morph.');\nM.push('4. Never hold the first frame. Motion starts in the first second and continues to the last frame. A clip that stays near-static and then morphs into its end image near the end is a failed clip.');\nM.push('5. Never reuse a keyframe, opening frame or closing frame from another scene as the first keyframe of an unchained scene. Every unchained scene opens on a frame that is visibly different from the opening frame of every other scene.');\nM.push('6. Only for a scene with chain_from_previous = true: extract the final frame of the immediately preceding rendered clip with ffmpeg (last frame, full resolution, PNG), use it as keyframes.first, and generate the last keyframe fresh so the camera or subject keeps moving through the clip. Render a chained scene only after the scene before it has finished.');\nM.push('');\nM.push('PRE-SHIP QUALITY CHECK (mandatory - run it with ffmpeg on the rendered clips BEFORE uploading anything):');\nM.push('1. CLIP COUNT: exactly ' + d.scene_count + ' clips exist, one per scene, none missing, none duplicated.');\nM.push('2. ASPECT RATIO: every clip is ' + aspect + '.');\nM.push('3. DURATION: every clip matches its duration_seconds within 1 second.');\nM.push('4. DISTINCT OPENINGS: extract the first frame of every clip and compare it with the first frame of every other clip (ffmpeg ssim filter, both frames scaled to 320 px wide). An unchained clip whose first frame matches the first frame of another clip (SSIM 0.90 or higher) fails.');\nM.push('5. MOTION: extract frames at 10, 25, 40, 55 and 70 percent of the clip duration and compare each frame with the next one (same SSIM method). A clip where every consecutive pair scores SSIM 0.97 or higher has barely moved and fails.');\nM.push('6. CHAINED SEAMS: every chained clip opens on the closing frame of the previous clip with no visible jump, colour shift, or subject teleport.');\nM.push('7. BRAND: colours and visual treatment match your brand-assets reference. No text overlays, no logos, no captions, no watermarks burned into any clip.');\nM.push('8. AUDIO: every clip is silent. No generated audio, no music, no voiceover.');\nM.push('9. INTEGRITY: no clip is corrupt, black, or truncated. Each plays start to finish.');\nM.push('');\nM.push('REGENERATE ONCE: a clip that fails any check is re-rendered one time only, with new first and last keyframes that follow the KEYFRAMES AND MOTION rules, and then checked again. If it still fails, keep the better of the two renders, upload it, and flag it in the clip index. Never re-render any clip more than once.');\nM.push('');\nM.push('UPLOAD (MANDATORY - required final step, do not skip it. Do not stop at a production brief):');\nM.push('DESTINATION_FOLDER_ID: ' + folderId);\nM.push('DESTINATION_FOLDER_URL: ' + folderUrl);\nM.push('');\nM.push('Export each clip as MP4 named exactly with its file_name value from the scene list above. After the quality check, upload ALL clips to the user Google Drive using rclone, targeting the EXISTING destination folder by its ID with the flag --drive-root-folder-id ' + folderId + ' so the MP4s land directly INSIDE that existing folder. The destination is a shared drive, so include shared-drive support. Run the upload EXACTLY ONCE; do not re-run or duplicate. Do NOT create a new folder. Do NOT use the folder ID as a new folder name. Do NOT rename the files. Do NOT leave the clips only in your task workspace. Do NOT upload any stills, keyframes, frame grabs, thumbnails, logs, or intermediate files to that folder - only the ' + d.scene_count + ' final MP4 clips.');\nM.push('');\nM.push('OUTPUT - CLIP INDEX: After uploading, list in your task output every file you placed in that folder, each with its file name, timing_start, the narrative role and metaphor you selected, chained yes or no, the highest opening-frame SSIM against any other clip (check 4), and the lowest consecutive-frame SSIM from check 5. Mark every clip that still failed after its one re-render as QA FAIL with the check it failed and the measured value. A production brief is not required.');\nconst msg = M.join('\\n');\nreturn { json: { ...d, manus_message: msg } };"
+      },
+      "id": "371080a7-4836-4ca2-8f38-afc4941e4735",
+      "name": "5. Build Manus Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -28016,
+        -4992
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/skill.list?project_id={{ ($json.cfg || {}).manus_project_id || ((($json.cfg || {}).broll) || {}).manus_project_id || '' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "583955c6-de2f-4775-8924-dbce111c462a",
+      "name": "5b. Resolve Skill ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -27792,
+        -4992
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const resp = $input.item.json || {};\nconst ctx = $('5. Build Manus Message').item.json;\nconst cfg = ctx.cfg || {};\nconst b = cfg.broll || {};\nconst rec = ctx.record_id || '(no id)';\nconst client = cfg.client_name || '(unknown client)';\nconst project = String(cfg.manus_project_id || b.manus_project_id || '').trim();\nconst fromOutputs = String(cfg.skill_name || '').trim();\nconst wanted = fromOutputs || String(b.skill_name || '').trim();\nconst source = fromOutputs ? 'client config (Skill_Name)' : 'client config (Config_JSON broll.skill_name)';\nif (!project) { throw new Error('No Manus project ID configured for ' + client + '::broll on record ' + rec + '. Nothing submitted.'); }\nif (!wanted) { throw new Error('No Manus skill configured for ' + client + '::broll on record ' + rec + '. Nothing submitted.'); }\nif (resp.ok === false || !Array.isArray(resp.data)) { throw new Error('skill.list failed for Manus project ' + project + ' on record ' + rec + ': ' + JSON.stringify(resp).substring(0, 300) + '. Nothing submitted.'); }\nconst all = resp.data.filter(Boolean);\nconst norm = s => String(s || '').trim().toLowerCase();\nconst projectSkills = all.filter(s => s.owner_type === 'project');\nconst matches = projectSkills.filter(s => norm(s.name) === norm(wanted));\nif (matches.length !== 1 || !matches[0].id) {\n  const nonProject = all.filter(s => s.owner_type !== 'project' && norm(s.name) === norm(wanted)).map(s => (s.owner_type || 'unknown') + ' ' + s.id);\n  let why;\n  if (matches.length > 1) why = matches.length + ' project skills share this name (' + matches.map(s => s.id).join(', ') + ')';\n  else if (nonProject.length) why = 'only non-project copies exist [' + nonProject.join(', ') + ']; personal, team, official and app skills are not allowed';\n  else why = 'no project skill with this name';\n  throw new Error('Skill ' + wanted + ' (' + source + ') not resolved for record ' + rec + ' in Manus project ' + project + ': ' + why + '. Project skills available: ' + (projectSkills.map(s => s.name).join(', ') || '(none)') + '. Nothing submitted.');\n}\nconst hit = matches[0];\nconst body = {\n  message: { content: [{ type: 'text', text: ctx.manus_message }], enable_skills: [hit.id], force_skills: [hit.id] },\n  title: (ctx.topic || 'B-Roll') + ' - ' + ctx.record_id,\n  project_id: project,\n  hide_in_task_list: false,\n  agent_profile: b.agent_profile || 'manus-1.6'\n};\nreturn { json: { ...ctx, manus_project_id: project, resolved_skill_id: hit.id, resolved_skill_name: hit.name || wanted, resolved_skill_owner_type: hit.owner_type, resolved_skill_source: source, skill_resolve_error: '', manus_body: JSON.stringify(body) } };"
+      },
+      "id": "61be324f-622b-4fc8-bd62-3defe93b0b8a",
+      "name": "5c. Pick Skill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -27568,
+        -4992
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.manus.ai/v2/task.create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.manus_body }}",
+        "options": {}
+      },
+      "id": "7cf06347-b27a-4fa2-9714-e46b08af802d",
+      "name": "5d. Submit to Manus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -27344,
+        -4992
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $input.item.json || {};\nconst ctx = $('5c. Pick Skill').item.json;\nconst taskId = r.task_id || (r.data && r.data.task_id) || '';\nif (!taskId || r.ok === false) { throw new Error('Manus task.create failed for record ' + (ctx.record_id || '(no id)') + ' with skill ' + ctx.resolved_skill_name + ' (' + ctx.resolved_skill_owner_type + ', ' + ctx.resolved_skill_id + '): no task_id returned. Response: ' + JSON.stringify(r).substring(0, 400)); }\nconst taskUrl = r.task_url || (r.data && r.data.task_url) || ('https://manus.im/app/' + taskId);\nconst driveQ = \"'\" + ctx.folder_id + \"' in parents and trashed = false and mimeType contains 'video/'\";\nreturn { json: {\n  ...ctx,\n  manus_task_id: taskId,\n  manus_task_url: taskUrl,\n  manus_has_task: true,\n  manus_error: '',\n  drive_q: driveQ,\n  poll_attempt: 0\n} };"
+      },
+      "id": "9a21c98b-3a0d-4f79-a80d-1e1cfdea337a",
+      "name": "5e. Extract Task ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -27120,
+        -4992
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "task-ok",
+              "leftValue": "={{ $json.manus_has_task }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f005edd5-b936-4a5a-9958-799e20f74e7d",
+      "name": "5f. Task Created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -26896,
+        -4992
+      ]
+    },
+    {
+      "parameters": {
+        "unit": "minutes"
+      },
+      "id": "3e0c0768-a8f7-452c-ab10-e6a340e5740b",
+      "name": "6. Wait 5m",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -26672,
+        -5088
+      ],
+      "webhookId": "3a362a6b-1c2a-4926-a41a-a47e8c068696"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.failure_notes }}",
+            "Status": "Error - B-Roll Issue",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "82b79e76-7eea-4df9-930b-8b42ca2e1a56",
+      "name": "5g. Error - Manus Submit Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -26672,
+        -4880
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\nUpdated: ' + $now.toFormat('yyyy-MM-dd HH:mm') + '\\nStage: Error - No scenes in production brief' + '\\nDetail: ' + ($json.parse_note || 'BRoll_Generated contained no numbered scene entries.') }}",
+            "Status": "Error - B-Roll Issue",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "2a811874-04a2-497b-8293-efb386d05459",
+      "name": "4c. Error - No Scenes",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -28912,
+        -4784
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\nUpdated: ' + $now.toFormat('yyyy-MM-dd HH:mm') + '\\nStage: Error - Ratio missing' + '\\nDetail: Ratio field is empty. Set Ratio to Landscape or Portrait, then reset status to Ready for B-roll Generation.' }}",
+            "Status": "Error - Need Ratio",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "fb1b297e-9f3a-4f41-b153-4ad3e94abba4",
+      "name": "2c. Error - Need Ratio",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -29360,
+        -4688
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\nreturn { json: { ...d, poll_attempt: (d.poll_attempt || 0) + 1 } };"
+      },
+      "id": "ff280c9d-0867-4a0c-8ec0-fac5e7e2e466",
+      "name": "6a. Restore Before Poll",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26448,
+        -5168
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/drive/v3/files?q={{ encodeURIComponent($json.drive_q) }}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "24b96e7b-5908-4746-86ad-4920935997d1",
+      "name": "6b. Poll Drive Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -26224,
+        -5168
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const resp = $input.item.json;\nconst ctx = $('6a. Restore Before Poll').item.json;\nconst b = (ctx.cfg || {}).broll || {};\nconst MAX_POLL_ATTEMPTS = b.max_poll_attempts || 24;\nconst files = (resp && Array.isArray(resp.files)) ? resp.files : [];\nconst found = files.length;\nconst expected = ctx.scene_count || 0;\nconst allIn = expected > 0 && found >= expected;\nconst timedOut = !allIn && ctx.poll_attempt >= MAX_POLL_ATTEMPTS;\nreturn { json: {\n  ...ctx,\n  clips_found: found,\n  clips_expected: expected,\n  clip_names: files.map(f => f.name),\n  all_clips_in: allIn,\n  poll_timed_out: timedOut,\n  max_poll_attempts: MAX_POLL_ATTEMPTS\n} };"
+      },
+      "id": "4797c96d-8051-4da4-9d18-a55f67ad1af6",
+      "name": "6c. Parse Clip Count",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26000,
+        -5168
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "clips-in",
+              "leftValue": "={{ $json.all_clips_in }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b861a210-f8e6-4100-80ee-fc5f77437684",
+      "name": "6d. All Clips In?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -25776,
+        -5168
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fresh = $input.item.json || {};\nconst d = $('6c. Parse Clip Count').item.json;\nconst f = fresh.fields || fresh;\nconst refetchOk = !!(fresh && fresh.id);\nconst freshRef = (f && typeof f.BRoll_Reference === 'string') ? f.BRoll_Reference : (d.broll_reference || '');\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = d.sep;\nconst NOTES_TAG = d.stage_tag;\nconst REF_TAG = d.ref_tag;\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = (tag) => new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(tag) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\n\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('1z. Attach Config').first().json.started_at || '';\n  triggered = raw ? raw.substring(0, 16).replace('T', ' ') : '';\n  const s = Date.parse(raw);\n  if (s) { const secs = Math.max(0, Math.round((Date.now() - s) / 1000)); runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'; }\n} catch (e) {}\n\nconst names = d.clip_names || [];\n\n// Full clip index for BRoll_Reference - one entry per clip with the edit timestamp.\nconst rows = d.scenes.map(s => {\n  const landed = names.indexOf(s.file_name) !== -1;\n  const dir = String(s.scene_direction || '').substring(0, 160);\n  return 'INSERT AT ' + s.timing_start + ' - ' + s.timing_end + '  (' + s.duration_seconds + 's)\\n  Clip: ' + s.file_name + (landed ? '' : '   <-- MISSING FROM DRIVE') + '\\n  Chained from previous: ' + (s.chain_from_previous ? 'yes' : 'no') + '\\n  Direction: ' + dir;\n}).join('\\n\\n');\n\n// Compact edit timeline for Reel_Notes so the editor sees placement without opening the reference field.\nconst timeline = d.scenes.map(s => {\n  const landed = names.indexOf(s.file_name) !== -1;\n  return '  ' + s.timing_start + ' - ' + s.timing_end + '  ' + s.file_name + (landed ? '' : '  [MISSING]');\n}).join('\\n');\n\nconst refBlock = sep + '\\n' + REF_TAG + '\\nTriggered: ' + triggered + '\\nUpdated: ' + stamp + '\\nRun time: ' + runtime + '\\nClips: ' + d.clips_found + ' of ' + d.clips_expected + '\\nDrive folder: ' + d.folder_link + '\\nManus Task URL: ' + d.manus_task_url + '\\nTimestamps are the edit-timeline position each clip drops into, computed from the script at 150 wpm by WF06c.\\n\\n' + rows;\nconst refBase = freshRef.replace(blockRe(REF_TAG), '').trim();\nconst refFinal = (refBase ? refBase + '\\n\\n' : '') + refBlock;\n\nconst notesBlock = sep + '\\n' + NOTES_TAG + '\\nTriggered: ' + triggered + '\\nUpdated: ' + stamp + '\\nRun time: ' + runtime + '\\nStage: Complete' + '\\nClips: ' + d.clips_found + ' of ' + d.clips_expected + '\\nDrive folder: ' + d.folder_link + '\\nManus Task ID: ' + d.manus_task_id + '\\nManus Task URL: ' + d.manus_task_url + '\\n\\nEdit timeline (insert each clip at):\\n' + timeline;\nconst notesBase = refetchOk ? freshNotes.replace(blockRe(NOTES_TAG), '').trim() : (d.notes_base || '');\nconst notesFinal = (notesBase ? notesBase + '\\n\\n' : '') + notesBlock;\n\n// MC-1: only the run that owns the record may write its final status.\nconst stillOurs = !refetchOk || ((f.BRoll_URL || '') === d.folder_link && f.Status === 'B-Roll Processing');\nconst lateMinutes = (d.max_poll_attempts || 24) * 5;\nconst lateBlock = sep + '\\n' + NOTES_TAG + '\\nTriggered: ' + triggered + '\\nUpdated: ' + stamp + '\\nRun time: ' + runtime + '\\nStage: Late - Manus had not uploaded the clips after ' + lateMinutes + ' minutes' + '\\nClips: ' + d.clips_found + ' of ' + d.clips_expected + '\\nDrive folder: ' + d.folder_link + '\\nManus Task ID: ' + d.manus_task_id + '\\nManus Task URL: ' + d.manus_task_url + '\\nDetail: The Manus task may still finish. Once the clips are in the folder, set status to Ready for B-roll Generation - the workflow picks them up from this folder without a new Manus task.';\nconst lateNotes = (notesBase ? notesBase + '\\n\\n' : '') + lateBlock;\n\nreturn { json: { ...d, scene_map_final: refFinal, reel_notes_final: notesFinal, late_notes_final: lateNotes, still_ours: stillOurs, is_late: d.poll_timed_out === true } };"
+      },
+      "id": "3fe3dbf5-1b10-42c4-a963-963509461308",
+      "name": "7. Compile Clip Index",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25328,
+        -5216
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "BRoll_Reference": "={{ $json.scene_map_final }}",
+            "BRoll_URL": "={{ $json.folder_link }}",
+            "Reel_Notes": "={{ $json.reel_notes_final + '\\nSkill: ' + $json.resolved_skill_name + ' (' + $json.resolved_skill_owner_type + ', ' + $json.resolved_skill_id + ') via ' + $json.resolved_skill_source }}",
+            "Status": "B-Roll Ready",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "8a507476-87ec-4860-824c-5e230eb40d29",
+      "name": "7b. Mark B-Roll Ready",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -25104,
+        -4736
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "timed-out",
+              "leftValue": "={{ $json.poll_timed_out }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a1bf1b1-8183-416b-a247-21a488803319",
+      "name": "6e. Timed Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -25552,
+        -4992
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.late_notes_final }}",
+            "Status": "B-Roll Late - Check Folder",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "4ac95d91-65f9-4371-88b5-383a9c8259da",
+      "name": "6f. Late - Check Folder",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -25328,
+        -4992
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "5334a94f-a4f2-4498-b1a2-d17c0e724526",
+      "name": "6g. Re-fetch Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -25552,
+        -5216
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "ac3ec2f4-b2f7-4a49-af82-052e127b22bc",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -31376,
+        -4400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Enabled}",
+        "options": {}
+      },
+      "id": "84dc36a0-c819-4f6f-9340-21ec9fb4b0d9",
+      "name": "0a2. Load Client Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -31152,
+        -4400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'broll';\n\nfunction parseJson(raw, label) {\n  if (!raw) return {};\n  try {\n    const v = JSON.parse(raw);\n    if (v && typeof v === 'object' && !Array.isArray(v)) return v;\n    return {};\n  } catch (e) { console.log('[0b] Invalid Config_JSON on ' + label + ': ' + e.message); return {}; }\n}\n\nconst outputs = $input.all().map(i => i.json);\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outByKey = {};\nfor (const o of outputs) {\n  const key = (o['Key'] || '').trim().toLowerCase();\n  if (key) outByKey[key] = o;\n}\n\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  const o = outByKey[(name + '::' + OUTPUT_TYPE).toLowerCase()] || null;\n  const merged = { ...parseJson(c['Config_JSON'], name), ...parseJson(o ? o['Config_JSON'] : '', name + '::' + OUTPUT_TYPE) };\n  const capRaw = parseInt(c['Daily_BRoll_Cap'], 10);\n  out.push({ json: {\n    ...merged,\n    client_name: name,\n    video_base_id: c['Video_Base_ID'],\n    brand_name: c['Brand_Name'] || name,\n    timezone: c['Timezone'] || 'Asia/Manila',\n    output_type: OUTPUT_TYPE,\n    daily_broll_cap: capRaw > 0 ? capRaw : 3,\n    drive_shared_drive_id: c['Drive_Shared_Drive_ID'] || '',\n    drive_folder_id: o ? (o['Drive_Folder_ID'] || '') : '',\n    manus_project_id: o ? (o['Manus_Project_ID'] || '') : '',\n    skill_name: o ? (o['Skill_Name'] || '') : '',\n    skill_fallback: o ? (o['Skill_Fallback'] || '') : ''\n  } });\n}\nconsole.log('[0b] Clients to process: ' + out.length);\nreturn out;"
+      },
+      "id": "248d6508-131e-4807-a377-d6a02f91fb15",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -30928,
+        -4400
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "b17bc3b2-9420-4d72-bda3-2fca2152180f",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -30704,
+        -4400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg, started_at: new Date().toISOString() } };"
+      },
+      "id": "3ceda03c-71b9-4e25-a145-721573cd97f5",
+      "name": "1z. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -30256,
+        -4800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "1c7ce35c-cca9-454e-ba29-65a9fc69a4de",
+      "name": "1y. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -30032,
+        -4800
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Scenes come straight from the production brief WF06c already wrote.\n// No second segmentation pass, no LLM call. Narrative role and visual style are\n// deliberately NOT set here - the Manus skill owns that vocabulary.\n// T-51: every scene is a distinct cut by default. chain_from_previous is true only\n// when the brief marks the scene as a continuous shot of the previous one.\nconst d = $input.item.json;\nconst cfg = d.cfg || {};\nconst b = cfg.broll || {};\n\nconst DEFAULT_DUR = b.default_duration_seconds || 8;\nconst CONTINUOUS_RE = /\\b(continuous (shot|take)|continues (from )?the previous (shot|scene|clip)|continuation of the previous (shot|scene|clip)|same shot continued)\\b/i;\n\nconst toSec = (mmss) => {\n  const m = String(mmss).match(/(\\d+):(\\d{1,2})/);\n  if (!m) return null;\n  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);\n};\nconst toMmss = (sec) => {\n  const s = Math.max(0, Math.round(sec));\n  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');\n};\n\n// WF06c writes numbered lines like: \"1. description at 0:05-0:12 \\u2014 reason\"\nconst parseList = (raw) => {\n  const items = [];\n  let cur = null;\n  for (const line of String(raw || '').split('\\n')) {\n    const t = line.trim();\n    if (!t) continue;\n    const m = t.match(/^(\\d+)\\.\\s+(.*)$/);\n    if (m) {\n      if (cur) items.push(cur);\n      cur = { n: parseInt(m[1], 10), text: m[2] };\n    } else if (cur) {\n      cur.text += ' ' + t;\n    }\n  }\n  if (cur) items.push(cur);\n\n  return items.map(x => {\n    let text = x.text;\n    let cue = '';\n    let cueEnd = '';\n    let note = '';\n    const dash = text.split('\\u2014');\n    if (dash.length > 1) {\n      note = dash.slice(1).join('\\u2014').trim();\n      text = dash[0].trim();\n    }\n    const rng = text.match(/\\s+at\\s+(\\d+:\\d{1,2})\\s*-\\s*(\\d+:\\d{1,2})\\s*$/);\n    const single = text.match(/\\s+at\\s+(\\d+:\\d{1,2})\\s*$/);\n    if (rng) { cue = rng[1]; cueEnd = rng[2]; text = text.slice(0, rng.index).trim(); }\n    else if (single) { cue = single[1]; text = text.slice(0, single.index).trim(); }\n    return { n: x.n, description: text, cue: cue, cue_end: cueEnd, note: note };\n  });\n};\n\nconst gen = parseList(d.broll_generated);\nconst ref = parseList(d.broll_reference);\n\nconst slugOf = (s) => (String(s).toLowerCase().replace(/[^a-z0-9\\s-]/g, '').trim().split(/\\s+/).slice(0, 4).join('-').substring(0, 40) || 'scene');\n\nconst scenes = [];\nfor (let i = 0; i < gen.length; i++) {\n  const g = gen[i];\n  const r = ref[i] || {};\n  const startSec = toSec(g.cue);\n  let endSec = toSec(g.cue_end);\n  if (startSec !== null && (endSec === null || endSec <= startSec)) { endSec = startSec + DEFAULT_DUR; }\n  const dur = (startSec !== null && endSec !== null) ? (endSec - startSec) : DEFAULT_DUR;\n  const id = 'scene_' + (i + 1);\n  const slug = slugOf(g.description);\n  scenes.push({\n    id: id,\n    file_slug: slug,\n    file_name: id + '_' + slug + '.mp4',\n    scene_direction: g.description + (g.note ? ' ' + g.note : ''),\n    style_reference: r.description || '',\n    timing_start: startSec !== null ? toMmss(startSec) : '',\n    timing_end: endSec !== null ? toMmss(endSec) : '',\n    duration_seconds: Math.max(1, Math.round(dur)),\n    chain_from_previous: i !== 0 && CONTINUOUS_RE.test(g.description + ' ' + g.note)\n  });\n}\n\nconst ok = scenes.length > 0;\nif (!ok) { console.log('[3] No scene entries parsed from BRoll_Generated for ' + d.record_id); }\n\nreturn { json: {\n  ...d,\n  scenes: scenes,\n  scene_count: scenes.length,\n  parse_ok: ok,\n  parse_note: ok ? '' : 'BRoll_Generated contained no numbered scene entries. Re-run WF06c to regenerate the production brief for this record.'\n} };"
+      },
+      "id": "c9c97e76-2919-4b2d-8cfb-3d4f251d75a0",
+      "name": "3. Build Scenes from Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -29360,
+        -4896
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 6
+      },
+      "id": "9575f833-9183-4425-b2eb-2f0d23e9e472",
+      "name": "0e. Loop Return",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -24000,
+        -4400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\nconst cfg = d.cfg || {};\nconst B = 'alfredaiNoteBoundary';\nconst TABLE_ID = 'tblSBKG2Zx2nZUPIT';\nconst baseId = cfg.video_base_id || '';\nconst recId = d.record_id || '';\nconst atUrl = (baseId && recId) ? ('https://airtable.com/' + baseId + '/' + TABLE_ID + '/' + recId) : '';\nconst brand = cfg.brand_name || cfg.client_name || '';\nconst tzLabel = ((cfg.timezone || 'Asia/Manila').split('/')[1] || 'PHT');\nconst files = (d.scenes || []).map(s => '- ' + s.file_name + (s.timing_start ? ('  [' + s.timing_start + ' - ' + s.timing_end + ']') : ''));\nconst lines = [\nbrand + ' Content Engine - generated asset folder',\n'',\n'Brand: ' + brand,\n'Content type: B-roll clip set',\n'Generated: ' + (d.gen_date || '') + ' (' + tzLabel + ')',\n'Topic: ' + (d.topic || ''),\n'Category: ' + (d.category || ''),\n'Aspect ratio: ' + (d.aspect_ratio || ''),\n'',\n'Airtable record ID: ' + recId,\n'Airtable record: ' + atUrl,\n'Airtable base: ' + baseId,\n'',\n'Expected clips: ' + (d.scene_count || 0),\n...files,\n'',\n'Manus skill ID: ' + (d.resolved_skill_id || ('not resolved - ' + (d.skill_resolve_error || ''))),\n'Manus task ID: ' + (d.manus_task_id || ''),\n'Manus task URL: ' + (d.manus_task_url || ''),\n'',\n'Created by the automation engine. Clips are uploaded by Manus after this note is written, so they may appear over the next hour.',\n'Posted vs not-posted is tracked manually in Outputs > Posted / Pending.'\n];\nconst note = lines.join('\\n');\nconst meta = JSON.stringify({ name: '00_INFO.txt', parents: [d.folder_id], mimeType: 'text/plain' });\nconst multipart = '--' + B + '\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n' + meta + '\\r\\n--' + B + '\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n' + note + '\\r\\n--' + B + '--';\nreturn { json: { ...d, note_multipart: multipart } };"
+      },
+      "id": "325fa277-5a11-42dc-b4b8-fbbfdfed8beb",
+      "name": "5h. Build Folder Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -27008,
+        -4768
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "multipart/related; boundary=alfredaiNoteBoundary",
+        "body": "={{ $json.note_multipart }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "cfbae2e0-bef4-43dc-b76c-daff89351f9f",
+      "name": "5i. Write Folder Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -26784,
+        -4768
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('5h. Build Folder Note').item.json;\nconst { note_multipart, ...rest } = ctx;\nreturn { json: rest };"
+      },
+      "id": "ce84b242-3012-4bcb-a645-f64f781c0635",
+      "name": "5j. Restore After Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26560,
+        -4768
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let ctx = {};\ntry { ctx = $('4g. Restore Context').item.json; } catch (e) { try { ctx = $('4g. Restore Context').last().json; } catch (e2) { ctx = {}; } }\nconst e = $input.item.json || {};\nconst raw = e.error;\nconst reason = String(typeof raw === 'string' ? raw : (raw && (raw.message || raw.description)) || e.manus_error || 'Manus task not created').substring(0, 1500);\nlet skill = '';\ntry { const p = $('5c. Pick Skill').item.json; if (p && p.resolved_skill_id) skill = p.resolved_skill_name + ' (' + p.resolved_skill_owner_type + ', ' + p.resolved_skill_id + ')'; } catch (err) {}\nconst lines = [ctx.sep, ctx.stage_tag, 'Updated: ' + $now.toFormat('yyyy-MM-dd HH:mm'), 'Stage: Error - Manus task not created; record not marked ready', 'Reason: ' + reason];\nif (skill) lines.push('Skill: ' + skill);\nlines.push('Drive folder: ' + (ctx.folder_link || ''));\nconst notes = (ctx.notes_base ? ctx.notes_base + '\\n\\n' : '') + lines.join('\\n');\nreturn { json: { record_id: ctx.record_id, cfg: ctx.cfg, failure_reason: reason, failure_skill: skill, failure_notes: notes } };"
+      },
+      "id": "069e785d-19a2-46ba-92a7-cfc7af79a511",
+      "name": "Err. Build Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26896,
+        -4672
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Status": "B-Roll Processing",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "9deb3580-fe32-4f71-bbf4-8386611a2fe9",
+      "name": "2d. Lock Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -29360,
+        -5296
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/drive/v3/files?q={{ encodeURIComponent(\"'\" + ((($('2. Extract Record Data').first().json.cfg || {}).broll || {}).drive_parent_folder_id || ($('2. Extract Record Data').first().json.cfg || {}).drive_folder_id || '') + \"' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false\") }}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=1000&fields=files(id,name,createdTime)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "040cb009-a677-4900-ba0a-0b30220ef11f",
+      "name": "2e. List B-Roll Folders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -29136,
+        -5296
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// MC-1 gate: count earlier B-roll folders for this record and for today.\nconst resp = $input.item.json || {};\nconst ctx = $('2. Extract Record Data').first().json;\nconst cfg = ctx.cfg || {};\nconst b = cfg.broll || {};\nconst PARENT = b.drive_parent_folder_id || cfg.drive_folder_id || '';\nconst MAX_PER_RECORD = parseInt(b.max_tasks_per_record, 10) > 0 ? parseInt(b.max_tasks_per_record, 10) : 2;\nconst cap = parseInt(cfg.daily_broll_cap, 10) > 0 ? parseInt(cfg.daily_broll_cap, 10) : 3;\nconst listOk = !!PARENT && Array.isArray(resp.files);\nconst all = listOk ? resp.files : [];\nconst suffix = '_' + ctx.short_id;\nconst prior = all.filter(f => String(f.name || '').endsWith(suffix)).sort((x, y) => String(y.createdTime || '').localeCompare(String(x.createdTime || '')));\nconst today = all.filter(f => String(f.name || '').startsWith(ctx.gen_date + '_')).length;\nconst q = prior.length\n  ? '(' + prior.slice(0, 20).map(f => \"'\" + f.id + \"' in parents\").join(' or ') + \") and trashed = false and (mimeType contains 'video/' or name = '00_INFO.txt')\"\n  : \"'\" + PARENT + \"' in parents and name = '__no_prior_folder__' and trashed = false\";\nreturn { json: { ...ctx, gate_list_ok: listOk, prior_folders: prior.map(f => ({ id: f.id, name: f.name })), prior_count: prior.length, today_count: today, daily_cap: cap, max_per_record: MAX_PER_RECORD, check_q: q } };"
+      },
+      "id": "83bfa5f2-a8fe-4919-8476-a48dd240108b",
+      "name": "2f. Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -28912,
+        -5296
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/drive/v3/files?q={{ encodeURIComponent($json.check_q) }}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=1000&fields=files(id,name,mimeType,parents)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "8ff79f0e-3ca1-4d4f-8ee2-f648cc91caed",
+      "name": "2g. Check Existing Clips",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -28688,
+        -5296
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// MC-1 gate decision: reuse an existing clip folder, block on a cap, or go ahead.\nconst resp = $input.item.json || {};\nconst g = $('2f. Gate').first().json;\nconst checkOk = Array.isArray(resp.files);\nconst files = checkOk ? resp.files : [];\nconst by = {};\nfor (const f of files) {\n  const p = (f.parents || [])[0];\n  if (!p) continue;\n  by[p] = by[p] || { videos: [], info_id: '' };\n  if (String(f.mimeType || '').indexOf('video/') === 0) by[p].videos.push(f.name);\n  else if (f.name === '00_INFO.txt') by[p].info_id = f.id;\n}\nlet cand = null;\nfor (const pf of g.prior_folders) {\n  const e = by[pf.id];\n  if (e && e.videos.length >= 3) { cand = { id: pf.id, name: pf.name, videos: e.videos, info_id: e.info_id }; break; }\n}\nlet block = '';\nif (!g.gate_list_ok || !checkOk) block = 'Could not read the B-roll folders in Drive, so earlier Manus tasks for this record could not be counted. Nothing submitted.';\nelse if (g.prior_count >= g.max_per_record) block = 'Record cap reached: ' + g.prior_count + ' B-roll folders already exist for this record (max ' + g.max_per_record + ' Manus tasks per record) and none could be reused as a full clip set. Nothing submitted. Check the folders by hand.';\nelse if (g.today_count >= g.daily_cap) block = 'Daily cap reached: ' + g.today_count + ' B-roll tasks already created today (cap ' + g.daily_cap + ', CONTROL Daily_BRoll_Cap). Nothing submitted. Set status back to Ready for B-roll Generation tomorrow.';\nreturn { json: { ...g, recover_candidate: cand, has_candidate: !!cand, info_url: cand ? ('https://www.googleapis.com/drive/v3/files/' + (cand.info_id || 'missing') + '?alt=media&supportsAllDrives=true') : '', gate_block: block, gate_ok: !block } };"
+      },
+      "id": "ff28dd0e-1c68-42fc-9dc3-ef2ec9c84081",
+      "name": "2h. Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -28464,
+        -5296
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-cand",
+              "leftValue": "={{ $json.has_candidate }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "590ff059-2c55-42b6-b0b3-848ac3fd260d",
+      "name": "2i. Recoverable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -28240,
+        -5296
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.info_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "9444b887-0aed-4d8a-b9c1-4166958f78dd",
+      "name": "2j. Download Folder Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -28016,
+        -5408
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// MC-1: build the notes for a clip set that already exists in Drive.\nconst r = $input.item.json || {};\nconst d = $('2h. Decide').first().json;\nconst c = d.recover_candidate;\nconst info = typeof r.data === 'string' ? r.data : '';\nconst m = info.match(/Expected clips:\\s*(\\d+)/);\nconst expected = m ? parseInt(m[1], 10) : 0;\nconst found = c.videos.length;\nconst full = expected > 0 ? found >= expected : found >= 5;\nconst link = 'https://drive.google.com/drive/folders/' + c.id;\nconst taskId = ((info.match(/Manus task ID:\\s*(\\S+)/) || [])[1]) || '';\nconst taskUrl = ((info.match(/Manus task URL:\\s*(\\S+)/) || [])[1]) || '';\nconst rows = [];\nfor (const line of info.split('\\n')) {\n  const x = line.trim().match(/^- (\\S+\\.mp4)\\s*(?:\\[(.+?) - (.+?)\\])?\\s*(.*)$/);\n  if (!x) continue;\n  const landed = c.videos.indexOf(x[1]) !== -1;\n  rows.push((x[2] ? 'INSERT AT ' + x[2] + ' - ' + x[3] + '\\n  Clip: ' : 'Clip: ') + x[1] + (landed ? '' : '   <-- MISSING FROM DRIVE') + (x[4] ? '\\n  Role: ' + x[4].trim() : ''));\n}\nconst listing = rows.length ? rows.join('\\n\\n') : c.videos.slice().sort().join('\\n');\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst count = found + ' of ' + (expected || found);\nconst refBlock = d.sep + '\\n' + d.ref_tag + '\\nUpdated: ' + stamp + '\\nClips: ' + count + '\\nDrive folder: ' + link + '\\nManus Task URL: ' + taskUrl + '\\nRecovered from the existing folder ' + c.name + ' - no new Manus task.\\n\\n' + listing;\nconst notesBlock = d.sep + '\\n' + d.stage_tag + '\\nUpdated: ' + stamp + '\\nStage: Complete (recovered from existing folder, no new Manus task)\\nClips: ' + count + '\\nDrive folder: ' + link + '\\nManus Task ID: ' + taskId + '\\nManus Task URL: ' + taskUrl;\nreturn { json: { ...d, recover_full: full, recover_found: found, recover_expected: expected, recover_link: link, recover_ref: (d.broll_reference ? d.broll_reference + '\\n\\n' : '') + refBlock, recover_notes: (d.notes_base ? d.notes_base + '\\n\\n' : '') + notesBlock } };"
+      },
+      "id": "67554e5e-659a-4d35-954f-298c4ef6c0f2",
+      "name": "2k. Build Recovered Index",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -27792,
+        -5408
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "full-set",
+              "leftValue": "={{ $json.recover_full }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "bee8c78e-83c5-4e72-abee-c3be07a0aab9",
+      "name": "2l. Full Set?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -27568,
+        -5408
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "BRoll_Reference": "={{ $json.recover_ref }}",
+            "BRoll_URL": "={{ $json.recover_link }}",
+            "Reel_Notes": "={{ $json.recover_notes }}",
+            "Status": "B-Roll Ready",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "cefee78b-0f50-497b-a9f1-ef461f92cb56",
+      "name": "2m. Mark B-Roll Ready (Recovered)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -27344,
+        -5504
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "gate-ok",
+              "leftValue": "={{ $json.gate_ok }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "82a12efb-ca11-4450-a889-f9fb11611226",
+      "name": "2n. Under Cap?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -28016,
+        -5200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\nUpdated: ' + $now.toFormat('yyyy-MM-dd HH:mm') + '\\nStage: Error - Not submitted to Manus' + '\\nDetail: ' + $json.gate_block }}",
+            "Status": "Error - B-Roll Issue",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "90c1bf59-a2d3-4f15-9cee-c85cfa5d80c7",
+      "name": "2o. Error - Gate Blocked",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -27792,
+        -5104
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "folder-ok",
+              "leftValue": "={{ $json.folder_ok }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "3bb992ea-7669-45c6-b7d9-d5237bc6fe1c",
+      "name": "4h. Folder OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -28128,
+        -4800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "still-ours",
+              "leftValue": "={{ $json.still_ours }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "a322c8fc-2de3-4085-8dcf-fec5bd835c19",
+      "name": "7a. Still Ours?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -25104,
+        -5216
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "is-late",
+              "leftValue": "={{ $json.is_late }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "42da4324-e309-4362-a66f-d5ce1a7d5de9",
+      "name": "7c. Late?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -24880,
+        -5216
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved-check",
+              "leftValue": "={{ $json.Production_Approval === true && (($json.Script_Approval && typeof $json.Script_Approval === 'object') ? $json.Script_Approval.name : $json.Script_Approval) === 'Approved' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "5b30f993-391d-4b97-82cc-7ba02100429e",
+      "name": "2p. Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -30032,
+        -5040
+      ],
+      "notes": "T-44: Production_Approval ticked AND Script_Approval = Approved, or nothing runs."
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "33372fa3-ac9d-4c13-bca0-2778eb4d42dd",
+      "name": "2q. Re-read Notes (Not Approved)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -29808,
+        -5040
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// T-44: record is not approved. Rewrite only this workflow's notes block.\nconst fresh = $input.item.json || {};\nconst f = fresh.fields || fresh;\nlet src = {};\ntry { src = $('1z. Attach Config').first().json || {}; } catch (e) { src = {}; }\nconst b = ((src.cfg || {}).broll) || {};\nconst sep = b.notes_separator || '==============================';\nconst TAG = b.stage_tag || 'B-ROLL (Manus skill)';\nconst notes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : (typeof src.Reel_Notes === 'string' ? src.Reel_Notes : '');\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst base = notes.replace(re, '').trim();\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + TAG + '\\nUpdated: ' + stamp + '\\nStage: Skipped' + '\\nNot approved: skipped';\nreturn { json: { record_id: fresh.id || src.id || '', reel_notes_final: (base ? base + '\\n\\n' : '') + block } };"
+      },
+      "id": "07e6ac54-a208-4e59-9c7c-430c924b7014",
+      "name": "2r. Build Skip Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -29584,
+        -5040
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Status": "B-Roll Idea Done",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "05d4f2a6-cc48-466c-b8b4-e0cce47a8404",
+      "name": "2s. Revert Not Approved",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -29360,
+        -5040
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2. Extract Record Data": {
+      "main": [
+        [
+          {
+            "node": "2b. Has Ratio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Has Ratio?": {
+      "main": [
+        [
+          {
+            "node": "2d. Lock Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2c. Error - Need Ratio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Has Valid Scenes?": {
+      "main": [
+        [
+          {
+            "node": "4d. Create Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4c. Error - No Scenes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Create Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "4e. Store Folder + Scenes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Store Folder + Scenes": {
+      "main": [
+        [
+          {
+            "node": "4f. Mark B-Roll Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4f. Mark B-Roll Processing": {
+      "main": [
+        [
+          {
+            "node": "4g. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Build Manus Message": {
+      "main": [
+        [
+          {
+            "node": "5b. Resolve Skill ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Resolve Skill ID": {
+      "main": [
+        [
+          {
+            "node": "5c. Pick Skill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5c. Pick Skill": {
+      "main": [
+        [
+          {
+            "node": "5d. Submit to Manus",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5d. Submit to Manus": {
+      "main": [
+        [
+          {
+            "node": "5e. Extract Task ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5f. Task Created?": {
+      "main": [
+        [
+          {
+            "node": "6. Wait 5m",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Wait 5m": {
+      "main": [
+        [
+          {
+            "node": "6a. Restore Before Poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6a. Restore Before Poll": {
+      "main": [
+        [
+          {
+            "node": "6b. Poll Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Poll Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "6c. Parse Clip Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Parse Clip Count": {
+      "main": [
+        [
+          {
+            "node": "6d. All Clips In?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d. All Clips In?": {
+      "main": [
+        [
+          {
+            "node": "6g. Re-fetch Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6e. Timed Out?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6e. Timed Out?": {
+      "main": [
+        [
+          {
+            "node": "6g. Re-fetch Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6. Wait 5m",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6g. Re-fetch Record": {
+      "main": [
+        [
+          {
+            "node": "7. Compile Clip Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0a2. Load Client Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a2. Load Client Outputs": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Ready for B-Roll Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready for B-Roll Generation": {
+      "main": [
+        [
+          {
+            "node": "1z. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1z. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1y. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1y. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "2p. Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Build Scenes from Brief": {
+      "main": [
+        [
+          {
+            "node": "4b. Has Valid Scenes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Error - Need Ratio": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "4c. Error - No Scenes": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "5g. Error - Manus Submit Failed": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "7b. Mark B-Roll Ready": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "0e. Loop Return": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5e. Extract Task ID": {
+      "main": [
+        [
+          {
+            "node": "5h. Build Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5h. Build Folder Note": {
+      "main": [
+        [
+          {
+            "node": "5i. Write Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5i. Write Folder Note": {
+      "main": [
+        [
+          {
+            "node": "5j. Restore After Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5j. Restore After Note": {
+      "main": [
+        [
+          {
+            "node": "5f. Task Created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. Build Failure": {
+      "main": [
+        [
+          {
+            "node": "5g. Error - Manus Submit Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2d. Lock Record": {
+      "main": [
+        [
+          {
+            "node": "2e. List B-Roll Folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2e. List B-Roll Folders": {
+      "main": [
+        [
+          {
+            "node": "2f. Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2f. Gate": {
+      "main": [
+        [
+          {
+            "node": "2g. Check Existing Clips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2g. Check Existing Clips": {
+      "main": [
+        [
+          {
+            "node": "2h. Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2h. Decide": {
+      "main": [
+        [
+          {
+            "node": "2i. Recoverable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2i. Recoverable?": {
+      "main": [
+        [
+          {
+            "node": "2j. Download Folder Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2n. Under Cap?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2j. Download Folder Info": {
+      "main": [
+        [
+          {
+            "node": "2k. Build Recovered Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2k. Build Recovered Index": {
+      "main": [
+        [
+          {
+            "node": "2l. Full Set?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2l. Full Set?": {
+      "main": [
+        [
+          {
+            "node": "2m. Mark B-Roll Ready (Recovered)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2n. Under Cap?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2m. Mark B-Roll Ready (Recovered)": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2n. Under Cap?": {
+      "main": [
+        [
+          {
+            "node": "3. Build Scenes from Brief",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2o. Error - Gate Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2o. Error - Gate Blocked": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4g. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4h. Folder OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4h. Folder OK?": {
+      "main": [
+        [
+          {
+            "node": "5. Build Manus Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Compile Clip Index": {
+      "main": [
+        [
+          {
+            "node": "7a. Still Ours?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a. Still Ours?": {
+      "main": [
+        [
+          {
+            "node": "7c. Late?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7c. Late?": {
+      "main": [
+        [
+          {
+            "node": "6f. Late - Check Folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7b. Mark B-Roll Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6f. Late - Check Folder": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "2p. Approved?": {
+      "main": [
+        [
+          {
+            "node": "2. Extract Record Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2q. Re-read Notes (Not Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2q. Re-read Notes (Not Approved)": {
+      "main": [
+        [
+          {
+            "node": "2r. Build Skip Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2r. Build Skip Notes": {
+      "main": [
+        [
+          {
+            "node": "2s. Revert Not Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2s. Revert Not Approved": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "457550d7-e49e-4cc2-a2a7-c4192091608a",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "mz2E9iCunpXpnPJp",
+  "tags": [
+    {
+      "updatedAt": "2026-02-12T01:13:37.643Z",
+      "createdAt": "2026-02-12T01:13:37.643Z",
+      "id": "L8r5R8kEQXaUFlQO",
+      "name": "AlfredAI Content"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

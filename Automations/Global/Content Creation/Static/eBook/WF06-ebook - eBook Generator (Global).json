@@ -1,0 +1,1877 @@
+{
+  "name": "WF06-ebook - eBook Generator (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "3c25f2fe-8c6f-4801-ac77-136cd5b376a7",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -528,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "filterByFormula": "{Status} = 'Ready for eBook'",
+        "options": {}
+      },
+      "id": "709a1e47-e189-403a-93f3-075d6f2c8899",
+      "name": "1. Get Ready Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        592,
+        -48
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "ecbe81e5-f6c6-4a52-bac7-b93d1c2c0657",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        592,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item=$input.item.json;\nconst cfg=item.__cfg||{};\nif(!cfg.static_base_id||!cfg.manus_project_id||!cfg.skill_name){throw new Error('Client config missing on record '+(item.id||'(no id)')+'. Aborting rather than submitting to the wrong client.');}\nconst sourceName=item['Source Name']||'';\nconst pdfRaw=(item['Source PDF URL']||'').trim();\nconst siteRaw=(item['Source Site URL']||'').trim();\nconst isUrl=function(s){return /^https?:\\/\\/\\S+$/i.test(s);};\nconst pdfOk=isUrl(pdfRaw);\nconst siteOk=isUrl(siteRaw);\nconst sourceUrl=pdfOk?pdfRaw:(siteOk?siteRaw:'');\nconst sourceKind=pdfOk?'PDF':(siteOk?'web page':'');\nlet errNote='';\nif(!sourceUrl){\n  if(pdfRaw&&!pdfOk){\n    errNote='Source PDF URL is filled but is not a usable link - it must start with http:// or https://. Current value: '+pdfRaw.substring(0,200);\n  } else if(siteRaw&&!siteOk){\n    errNote='Source Site URL is filled but is not a usable link - it must start with http:// or https://. Current value: '+siteRaw.substring(0,200);\n  } else {\n    errNote='Neither Source PDF URL nor Source Site URL is filled. Add one, then set Status back to Ready for eBook.';\n  }\n}\nconst existingNotes=item['Notes']||'';\nconst STAGE_TAG='EBOOK CREATE (skill)';\nconst sep='==============================';\nconst blockRe=new RegExp('\\\\n*'+sep+'\\\\n'+STAGE_TAG.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')+'[\\\\s\\\\S]*?(?=(\\\\n'+sep+'\\\\n)|$)','g');\nconst notesBase=existingNotes.replace(blockRe,'').trim();\nreturn{json:{record_id:item.id||'',source_name:sourceName,topic:sourceName,source_media:sourceUrl,source_kind:sourceKind,source_error_note:errNote,notes_base:notesBase,stage_tag:STAGE_TAG,sep,client:cfg.client_name||'',has_source:!!sourceUrl,cfg}};"
+      },
+      "id": "868bb70f-94aa-4963-bd49-c9a732935004",
+      "name": "3. Extract Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "eBook Processing"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "09c50e20-833a-4a8e-bffc-65cae4524659",
+      "name": "4. Mark Processing",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        -48
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const src=$('3. Extract Record').item.json;\nreturn{json:{...src}};"
+      },
+      "id": "4153f957-b8f5-4bfc-88e7-1351ec47ec14",
+      "name": "4b. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst recordId=d.record_id||'';\nconst shortId=recordId?recordId.substring(0,7):'norec';\nconst raw=(d.source_name||'ebook').toLowerCase().replace(/[^\\w\\s-]/g,'').replace(/\\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');\nlet slug=raw;\nif(slug.length>40){slug=slug.substring(0,40);const cut=slug.lastIndexOf('-');if(cut>15)slug=slug.substring(0,cut);}\nslug=slug.replace(/^-|-$/g,'')||'ebook';\nconst tz=(d.cfg&&d.cfg.timezone)||'Asia/Manila';\nconst genDate=$now.setZone(tz).toFormat('yyyy-MM-dd');\nconst subfolderName=genDate+'_'+slug+'_'+shortId;\nreturn{json:{...d,subfolder_name:subfolderName,gen_date:genDate,short_id:shortId}};"
+      },
+      "id": "f016b6ca-1809-4188-a1ff-21a39d360e5a",
+      "name": "4c. Prepare Subfolder Name",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": {{ JSON.stringify($json.subfolder_name) }},\n  \"mimeType\": \"application/vnd.google-apps.folder\",\n  \"parents\": [{{ JSON.stringify($json.cfg.drive_folder_id) }}]\n}",
+        "options": {}
+      },
+      "id": "a6ca14bf-f1cb-4de0-b783-3c58ff0069c8",
+      "name": "4d. Create Drive Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2160,
+        -48
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderResp=$input.item.json;\nconst prev=$('4c. Prepare Subfolder Name').item.json;\nconst subFolderId=folderResp.id||'';\nconst driveFolderUrl=subFolderId?`https://drive.google.com/drive/folders/${subFolderId}`:'';\nreturn{json:{...prev,sub_folder_id:subFolderId,drive_folder_url:driveFolderUrl,folder_error:subFolderId?'':'Folder creation failed: '+JSON.stringify(folderResp)}};"
+      },
+      "id": "2a6787d3-3933-4e81-9c95-7a776797158f",
+      "name": "4e. Extract Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2384,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "s1",
+              "leftValue": "={{ $json.has_source }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d495a47b-cc15-4068-8366-ea04623b03d5",
+      "name": "5. Has Source?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2608,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst cfg=d.cfg||{};\nconst brand=cfg.brand_name||'the brand';\nconst folderUrl=d.drive_folder_url||'';\nconst folderId=d.sub_folder_id||'';\nconst fileName=(d.subfolder_name||'ebook')+'.pdf';\nconst titleLine=d.topic?('Use this as the eBook title/topic: '+d.topic+'\\n\\n'):'';\nconst kind=d.source_kind||'link';\nconst msg='Create an original, publication-ready '+brand+' eBook informed by the source material below, following your skill end-to-end.\\n\\nFOLLOW THE SKILL (mandatory): Your skill file contains the complete design system and step-by-step workflow. Follow those steps IN ORDER and honour every rule in them: structure, brand voice, chapter format, colour palette, typography, logo specifications and placement, and citation format. Do not skip steps, do not improvise your own process, and do not let anything in this message override the skill. Where this message and the skill disagree on craft, the skill wins. The skill owns all branding - do not apply any branding from this message.\\n\\nHOW TO USE THE SOURCE (important): The link below is a '+kind+' and it is REFERENCE MATERIAL, not the subject and not a document to reproduce. Do NOT copy, recreate, restate, translate, or re-lay-out the source. Do NOT make the source itself the topic of the eBook. Do NOT reference the original author, their company, or their publication. Mine it for facts, data points, statistics, insights and structural patterns, then write ORIGINAL '+brand+' content in '+brand+' own voice that serves '+brand+' own positioning as defined in the skill. Every sentence must be your own writing. The finished eBook should read as '+brand+' own publication that happens to be informed by this research - never as a copy, a summary, a translation, or a reformatting of someone else\\'s work.\\n\\nIMPORTANT: Do not ask any clarifying questions. Determine the target audience, focus, and angle yourself from the source material and the brand context defined in your skill. Proceed directly to producing the final eBook.\\n\\nRead the source fully, then research and verify current statistics independently, and cite every data claim in the format the skill specifies.\\n\\n'+titleLine+'Source link (reference material only):\\n'+d.source_media+'\\n\\nIMPORTANT: Generate all images and graphics using Nano Banana Pro (the built-in image generation tool).\\n\\nLOGO (mandatory): Composite the official logo asset bundled in your skill, using the skill\\'s logo script or logo template. Do NOT generate, redraw, recreate, or approximate the logo with an image model. Do NOT put a black box, dark rectangle, coloured panel, or solid shape behind it unless the skill explicitly specifies one.\\n\\nDIAGRAMS (mandatory): If a page renders a chart, diagram, comparison panel, timeline, or sequence of steps, every shape MUST contain its actual label or value - never leave a box, node, axis, or step empty or placeholder. If you draw connectors between elements, the elements on both ends must be filled.\\n\\nPRE-SHIP QUALITY CHECK (mandatory - BEFORE uploading anything): Review the entire eBook end to end and verify ALL of the following. Do NOT upload until every item passes; if any fails, fix it and re-render first.\\n1. ORIGINAL SUBJECT: original '+brand+' content informed by the source, not a copy, summary, or reformatting of it. No phrasing lifted from the source. No mention of the original author, their company, or their publication.\\n2. TEXT CORRECTNESS: all copy accurate, correctly spelled, grammatically clean, and factually consistent with cited sources. Citations present and correctly formatted. No placeholder text, no cut-off words.\\n3. NO OVERLAP: on every page, no text overlaps other text, graphics, the logo, or page edges. Everything inside safe margins, nothing clipped.\\n4. READABILITY: every text element legible with strong contrast. Heading and body sizes consistent and appropriate per the skill.\\n5. GRAPHICS CORRECT: all graphics, charts, icons, colours and the logo are correct, on-brand, not distorted, not duplicated, and relevant.\\n6. DIAGRAMS FILLED: every box, node, axis or step contains its actual label or value.\\n7. LAYOUT: consistent alignment, spacing and page order; title page and CTA page correct; no blank or broken pages.\\n8. COMPLETENESS: all chapters, the references block, and every intended page present in the final PDF.\\nOnly once every check passes, proceed to upload.\\n\\nUPLOAD (MANDATORY - read every rule, follow exactly):\\nDESTINATION_FOLDER_ID: '+folderId+'\\nDESTINATION_FOLDER_URL: '+folderUrl+'\\nOUTPUT_FILENAME: '+fileName+'\\n\\nExport the final eBook as a single PDF named EXACTLY '+fileName+'. Do NOT upload intermediates.\\n\\nUPLOAD RULES - these prevent duplicate files and stray folders, follow them literally:\\n- Run the upload ONE TIME ONLY, as a SINGLE command. Use rclone with shared drive support and --drive-root-folder-id '+folderId+' so the PDF lands directly inside the existing destination folder.\\n- The destination folder ALREADY EXISTS. Do NOT create a folder. Do NOT pass the filename as a destination folder name.\\n- Use ONE tool for the upload. Do NOT fall back to a second method. If rclone reports success, the upload is DONE.\\n- Do NOT verify by listing the folder, and do NOT re-upload if a listing appears empty or stale. Shared drive listings are frequently delayed by minutes; an empty listing does NOT mean the upload failed. Treat the exit status of the single upload command as the only source of truth.\\n- Only if the upload command itself returns a non-zero exit status or an explicit error, retry once - and before retrying, delete any partial files or stray folders it created.\\n- The destination folder must end up containing EXACTLY 1 PDF and ZERO subfolders.\\n\\nAfter the single upload, confirm in your task output the exact file you placed in that folder and provide its Drive link.';\nreturn{json:{...d,manus_message:msg,output_filename:fileName}};"
+      },
+      "id": "b52c4bb6-85b8-4a69-8eee-3cc08e24d75b",
+      "name": "6. Build Manus Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/skill.list?project_id={{ $json.cfg.manus_project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "d7c6cbb0-b4fc-4626-a03a-f82d67d97a49",
+      "name": "6b. Resolve Skill ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3056,
+        -144
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp=$input.item.json||{};\nconst ctx=$('6. Build Manus Message').item.json;\nconst cfg=ctx.cfg||{};\nconst rec=ctx.record_id||'(no id)';\nconst client=cfg.client_name||'(unknown client)';\nconst project=String(cfg.manus_project_id||'').trim();\nconst wanted=String(cfg.skill_name||'').trim();\nconst source='client config (Skill_Name)';\nif(!project){throw new Error('No Manus project ID configured for '+client+'::ebook on record '+rec+'. Nothing submitted.');}\nif(!wanted){throw new Error('No Manus skill configured for '+client+'::ebook on record '+rec+'. Nothing submitted.');}\nif(resp.ok===false||!Array.isArray(resp.data)){throw new Error('skill.list failed for Manus project '+project+' on record '+rec+': '+JSON.stringify(resp).substring(0,300)+'. Nothing submitted.');}\nconst all=resp.data.filter(Boolean);\nconst norm=s=>String(s||'').trim().toLowerCase();\nconst projectSkills=all.filter(s=>s.owner_type==='project');\nconst matches=projectSkills.filter(s=>norm(s.name)===norm(wanted));\nif(matches.length!==1||!matches[0].id){\n  const nonProject=all.filter(s=>s.owner_type!=='project'&&norm(s.name)===norm(wanted)).map(s=>(s.owner_type||'unknown')+' '+s.id);\n  let why;\n  if(matches.length>1)why=matches.length+' project skills share this name ('+matches.map(s=>s.id).join(', ')+')';\n  else if(nonProject.length)why='only non-project copies exist ['+nonProject.join(', ')+']; personal, team, official and app skills are not allowed';\n  else why='no project skill with this name';\n  throw new Error('Skill '+wanted+' ('+source+') not resolved for record '+rec+' in Manus project '+project+': '+why+'. Project skills available: '+(projectSkills.map(s=>s.name).join(', ')||'(none)')+'. Nothing submitted.');\n}\nconst hit=matches[0];\nreturn{json:{...ctx,manus_project_id:project,resolved_skill_id:hit.id,resolved_skill_name:hit.name||wanted,resolved_skill_owner_type:hit.owner_type,resolved_skill_source:source,skill_resolve_error:''}};"
+      },
+      "id": "aaa4d2b5-be51-4249-8c3d-5bdeba56a1e8",
+      "name": "6c. Pick Skill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3280,
+        -144
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.manus.ai/v2/task.create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"content\": [{ \"type\": \"text\", \"text\": {{ JSON.stringify($json.manus_message) }} }],\n    \"enable_skills\": [{{ JSON.stringify($json.resolved_skill_id) }}],\n    \"force_skills\": [{{ JSON.stringify($json.resolved_skill_id) }}]\n  },\n  \"title\": {{ JSON.stringify(($json.topic || \"Ebook\") + \" - \" + $json.record_id) }},\n  \"project_id\": {{ JSON.stringify($json.manus_project_id) }},\n  \"hide_in_task_list\": false,\n  \"agent_profile\": \"manus-1.6\"\n}",
+        "options": {}
+      },
+      "id": "bb947427-ffd3-48e5-9417-85794f9e0745",
+      "name": "7. Submit to Manus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3504,
+        -144
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$input.item.json||{};\nconst ctx=$('6c. Pick Skill').item.json;\nconst taskId=r.task_id||(r.data&&r.data.task_id)||'';\nif(!taskId||r.ok===false){throw new Error('Manus task.create failed for record '+(ctx.record_id||'(no id)')+' with skill '+ctx.resolved_skill_name+' ('+ctx.resolved_skill_owner_type+', '+ctx.resolved_skill_id+'): no task_id returned. Response: '+JSON.stringify(r).substring(0,400));}\nreturn{json:{...ctx,manus_task_id:taskId,manus_task_url:r.task_url||('https://manus.im/app/'+taskId),manus_has_task:true,manus_error:''}};"
+      },
+      "id": "6a243166-509a-4588-a01b-7ea0ea8f2c1e",
+      "name": "8. Extract Task ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        -144
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\nUpdated: ' + $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm') + ' PHT' + '\\nStage: Waiting for Manus' + '\\nDispatched At: ' + $now.toUTC().toISO() + '\\nSkill: ' + $json.resolved_skill_name + ' (' + $json.resolved_skill_owner_type + ', ' + $json.resolved_skill_id + ') via ' + $json.resolved_skill_source + '\\nSource: ' + ($json.source_kind || 'link') + ' ' + $json.source_media + '\\nDrive folder: ' + $json.drive_folder_url + '\\nDrive folder ID: ' + $json.sub_folder_id + '\\nExpected files: ' + ($json.output_filename || '') + '\\nManus Task ID: ' + $json.manus_task_id + '\\nManus Task URL: ' + $json.manus_task_url }}",
+            "Status": "eBook Processing",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "e9f5adcc-382f-4b3d-a4b9-77ead998ff10",
+      "name": "9. Record Dispatch",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4624,
+        32
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\n' + 'Updated: ' + $now.setZone($json.cfg.timezone || 'Asia/Manila').toFormat('yyyy-MM-dd HH:mm') + '\\n' + $json.source_error_note }}",
+            "Status": "Error - Missing Source",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "056c91bc-45d1-4b0a-8879-3f0a3fe2e17e",
+      "name": "Err. No Source",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        48
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "03b1ab36-b51a-421f-9b3c-ff5ab1cac39f",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Static_Enabled})",
+        "options": {}
+      },
+      "id": "bd22e6c1-1a10-4740-a248-4cafc3b7c4ed",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -304,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "AND({Output_Type}='ebook', {Enabled})",
+        "options": {}
+      },
+      "id": "9191df03-98c8-4a5b-9120-879c1c62b4e6",
+      "name": "0b. Load Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        192
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'ebook';\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outputs = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Static_Enabled'] !== true) continue;\n  const row = outputs.find(o => o['Key'] === name + '::' + OUTPUT_TYPE);\n  if (!row) continue;\n  if (row['Enabled'] !== true) continue;\n  if (!c['Static_Base_ID'] || !row['Drive_Folder_ID'] || !row['Manus_Project_ID'] || !row['Skill_Name']) continue;\n  out.push({ json: {\n    client_name: name,\n    static_base_id: c['Static_Base_ID'],\n    drive_shared_drive_id: c['Drive_Shared_Drive_ID'] || '',\n    brand_name: c['Brand_Name'] || name,\n    timezone: c['Timezone'] || 'Asia/Manila',\n    drive_folder_id: row['Drive_Folder_ID'],\n    manus_project_id: row['Manus_Project_ID'],\n    skill_name: row['Skill_Name'],\n    skill_fallback: row['Skill_Fallback'] || ''\n  }});\n}\nreturn out;"
+      },
+      "id": "4d5ba4cf-6a5f-4509-b900-e6299b4830f3",
+      "name": "0c. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "86bfa225-2dc7-45ce-b322-4e63ec7b6f11",
+      "name": "0d. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        368,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "8aeda80d-e5e4-4bfb-a31b-9effbc409fa8",
+      "name": "1a. Has Records?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        816,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const loop = $('0d. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.static_base_id) { throw new Error('Could not resolve client config for this iteration. Refusing to run with the wrong client.'); }\nreturn [{ json: { ...$input.item.json, __cfg: cfg } }];"
+      },
+      "id": "072d6423-b5eb-457f-99bf-b4fe6fb58454",
+      "name": "1b. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst cfg=d.cfg||{};\nconst B='alfredaiNoteBoundary';\nconst TABLE_ID='tblbnlPeQbK1owFTY';\nconst baseId=cfg.static_base_id||'';\nconst recId=d.record_id||'';\nconst atUrl=(baseId&&recId)?('https://airtable.com/'+baseId+'/'+TABLE_ID+'/'+recId):'';\nconst lines=[\n(cfg.brand_name||cfg.client_name||'')+' Content Engine - generated asset folder',\n'',\n'Brand: '+(cfg.brand_name||cfg.client_name||''),\n'Content type: eBook',\n'Generated: '+(d.gen_date||'')+' ('+((cfg.timezone||'Asia/Manila').split('/')[1]||'PHT')+')',\n'Topic: '+(d.source_name||''),\n'Source ('+(d.source_kind||'link')+'): '+(d.source_media||''),\n'',\n'Airtable record ID: '+recId,\n'Airtable record: '+atUrl,\n'Airtable base: '+baseId,\n'',\n'Expected file: '+(d.output_filename||''),\n'Manus skill: '+(d.resolved_skill_name||''),\n'Manus task ID: '+(d.manus_task_id||''),\n'Manus task URL: '+(d.manus_task_url||''),\n'',\n'Created by the automation engine. The PDF is uploaded by Manus after this note is written, so it may appear shortly after.',\n'Posted vs not-posted is tracked manually in Outputs > Posted / Pending.'\n];\nconst note=lines.join('\\n');\nconst meta=JSON.stringify({name:'00_INFO.txt',parents:[d.sub_folder_id],mimeType:'text/plain'});\nconst multipart='--'+B+'\\r\\nContent-Type: application/json; charset=UTF-8\\r\\n\\r\\n'+meta+'\\r\\n--'+B+'\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n'+note+'\\r\\n--'+B+'--';\nreturn[{json:{...d,note_multipart:multipart}}];"
+      },
+      "id": "f25e812e-f4bc-458e-ab06-4e3433a5bf50",
+      "name": "8h. Build Folder Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3952,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "multipart/related; boundary=alfredaiNoteBoundary",
+        "body": "={{ $json.note_multipart }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "4cb97396-0226-4365-9372-60d098ad8351",
+      "name": "8i. Write Folder Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        4176,
+        -144
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx=$('8h. Build Folder Note').item.json;\nconst {note_multipart,...rest}=ctx;\nreturn{json:rest};"
+      },
+      "id": "a7794e0f-f858-4b54-a92d-ce31867c54e7",
+      "name": "8j. Restore After Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let ctx;\ntry{ctx=$('4e. Extract Folder ID').item.json;}catch(e){ctx=$('4e. Extract Folder ID').last().json;}\nconst cfg=ctx.cfg||{};\nconst e=$input.item.json||{};\nconst raw=e.error;\nconst reason=String(typeof raw==='string'?raw:(raw&&(raw.message||raw.description))||JSON.stringify(e)).substring(0,1500);\nlet skill='';\ntry{const p=$('6c. Pick Skill').item.json;if(p&&p.resolved_skill_id)skill=p.resolved_skill_name+' ('+p.resolved_skill_owner_type+', '+p.resolved_skill_id+')';}catch(err){}\nconst lines=[ctx.sep,ctx.stage_tag,'Updated: '+$now.setZone(cfg.timezone||'Asia/Manila').toFormat('yyyy-MM-dd HH:mm'),'FAILED - Manus task not created; record not marked ready.','Reason: '+reason];\nif(skill)lines.push('Skill: '+skill);\nlines.push('Source ('+(ctx.source_kind||'link')+'): '+(ctx.source_media||''),'Drive folder: '+(ctx.drive_folder_url||''));\nconst notes=(ctx.notes_base?ctx.notes_base+'\\n\\n':'')+lines.join('\\n');\nreturn{json:{record_id:ctx.record_id,failure_reason:reason,failure_skill:skill,failure_notes:notes,cfg:cfg}};"
+      },
+      "id": "b8181f9a-8392-4177-9f1a-cf2adcc3f160",
+      "name": "Err. Build Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Notes": "={{ $json.failure_notes }}",
+            "Status": "Error - eBook Generation Failed",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "b14ffac3-8c1d-433d-bb9f-bf29580dc456",
+      "name": "Err. Manus Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3952,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved",
+              "leftValue": "={{ $json.Production_Approval === true }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "d337f086-633b-4d9a-8304-08fcf74e21cb",
+      "name": "1c. Production Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1152,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.__cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "6da6ab99-f288-4302-a19d-cb42e0676488",
+      "name": "1d. Re-read Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        352
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw=$input.item.json||{};\nconst rec=raw.fields?{...raw.fields,id:raw.id}:raw;\nconst src=$('1c. Production Approved?').item.json;\nconst cfg=src.__cfg||{};\nconst TAG='EBOOK CREATE (skill)';\nconst sep='==============================';\nconst esc=TAG.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst re=new RegExp('\\\\n*'+sep+'\\\\n'+esc+'[\\\\s\\\\S]*?(?=(\\\\n'+sep+'\\\\n)|$)','g');\nconst base=String(rec['Notes']||'').replace(re,'').trim();\nconst ts=$now.setZone(cfg.timezone||'Asia/Manila').toFormat('yyyy-MM-dd HH:mm');\nconst block=[sep,TAG,ts+' - Not generated: Production_Approval not ticked. Sent back to Idea.'].join('\\n');\nreturn{json:{record_id:rec.id||src.id,notes:(base?base+'\\n\\n':'')+block,cfg}};"
+      },
+      "id": "e7efb267-651a-4106-a52c-fb43364dc77d",
+      "name": "1e. Build Idea Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Notes": "={{ $json.notes }}",
+            "Status": "Idea",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "56c0d461-dddf-45ce-b8e1-8f38d0c513ab",
+      "name": "1f. Back to Idea",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        352
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d=$input.item.json;\nconst tail='\\n\\nFINAL OUTPUT FORMAT (mandatory - overrides any other instruction about how to end your task output): After the upload has finished, end the task with ONE final message that contains ONLY a single JSON object - no other text before or after it and no code fences. Use exactly these keys:\\n{\"status\":\"done\",\"files\":[\"every file name you uploaded, exactly as named in Drive\"],\"caption\":\"the full post copy or caption, or an empty string if there is none\",\"notes\":\"anything the team should know, or an empty string\"}\\nIf you could not finish the job or the upload, send the same JSON object with \"status\":\"failed\" and put the reason in \"notes\". Never end with a question instead of this message.';\nreturn{json:{...d,manus_message:String(d.manus_message||'')+tail}};"
+      },
+      "id": "251947cd-a9c9-4788-8dce-6a38f6947d65",
+      "name": "6d. Append Output Contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3392,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "dda2eccc-a5bd-4181-ae4b-0be83a375e2b",
+      "name": "P0. Every 2 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -528,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Static_Enabled})",
+        "options": {}
+      },
+      "id": "2e6a457f-1ee5-484c-a95a-3e0018c279d1",
+      "name": "P1. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -304,
+        704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const TYPES=['ebook'];\nconst clients=$('P1. Load Clients').all().map(i=>i.json);\nconst outputs=$input.all().map(i=>i.json);\nconst seen={};\nconst out=[];\nfor(const c of clients){\n  const name=c['Client_Name'];\n  const base=c['Static_Base_ID'];\n  if(!name||c['Static_Enabled']!==true||!base||seen[base])continue;\n  if(!outputs.some(o=>TYPES.some(t=>o['Key']===name+'::'+t)))continue;\n  seen[base]=true;\n  out.push({json:{client_name:name,static_base_id:base,notes_stage_tag:'EBOOK CREATE (skill)'}});\n}\nreturn out;"
+      },
+      "id": "9f0c7943-38a7-422b-ba0e-18faa67cd2f2",
+      "name": "P2. Build Poll Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "filterByFormula": "{Status} = 'eBook Processing'",
+        "options": {}
+      },
+      "id": "7eb09d28-33bd-4724-8abd-794a639ee9c8",
+      "name": "P3. Get Processing Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        144,
+        704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const NOTES_FIELD='Notes';\nconst DEFAULT_TAG='EBOOK CREATE (skill)';\nconst SEP='==============================';\nconst esc=s=>String(s).replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst items=$input.all();\nconst out=[];\nfor(let i=0;i<items.length;i++){\n  const r=items[i].json||{};\n  if(!r.id)continue;\n  let cfg=null;\n  try{cfg=$('P2. Build Poll Config').itemMatching(i).json;}catch(e){cfg=null;}\n  if(!cfg||!cfg.static_base_id)continue;\n  const tag=cfg.notes_stage_tag||DEFAULT_TAG;\n  const m=String(r[NOTES_FIELD]||'').match(new RegExp(esc(SEP)+'\\n'+esc(tag)+'\\n([^]*?)(?=\\n'+esc(SEP)+'\\n|$)'));\n  if(!m||!/^Stage: Waiting for Manus$/m.test(m[1]))continue;\n  const block=m[1];\n  const g=k=>{const x=block.match(new RegExp('^'+esc(k)+': *(.*)$','m'));return x?x[1].trim():'';};\n  const taskId=g('Manus Task ID');\n  const folderId=g('Drive folder ID');\n  if(!taskId||!folderId)continue;\n  const at=Date.parse(g('Dispatched At'));\n  out.push({json:{record_id:r.id,cfg,stage_tag:tag,manus_task_id:taskId,manus_task_url:g('Manus Task URL'),drive_folder_id:folderId,drive_folder_url:g('Drive folder')||('https://drive.google.com/drive/folders/'+folderId),expected_files:g('Expected files').split(',').map(s=>s.trim()).filter(Boolean),skill_line:g('Skill'),source_line:g('Source'),elapsed_min:at?Math.round((Date.now()-at)/60000):0}});\n}\nreturn out;"
+      },
+      "id": "f2d81d3d-af51-480d-a5f9-e929d54f6f54",
+      "name": "P4. Parse Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/task.listMessages?task_id={{ encodeURIComponent($json.manus_task_id) }}&order=desc&limit=30",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "3bcf6097-234f-4f7d-9135-6a01564fec20",
+      "name": "P5. List Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        592,
+        704
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Qw5JOcIhtXmBNVmm",
+          "name": "Manus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=200&fields=files(id,name,mimeType)&q={{ encodeURIComponent(\"'\" + $('P4. Parse Dispatch').item.json.drive_folder_id + \"' in parents and trashed = false\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "3269c6f3-9586-4445-aaac-0bdd740c2324",
+      "name": "P6. List Drive Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        816,
+        704
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const TIMEOUT_MIN=120;\nconst KIND='ebook';\nconst ctx=$('P4. Parse Dispatch').item.json;\nconst mr=$('P5. List Messages').item.json||{};\nconst dr=$input.item.json||{};\nconst msgs=Array.isArray(mr.messages)?mr.messages:[];\nlet agent='',waitWhy='',errText='';\nfor(const m of msgs){\n  if(!m)continue;\n  if(!agent&&m.status_update&&m.status_update.agent_status){agent=String(m.status_update.agent_status).toLowerCase();const sd=m.status_update.status_detail||{};waitWhy=String(sd.waiting_description||sd.waiting_for_event_type||'');}\n  if(!errText&&m.error_message&&m.error_message.content){errText=String(m.error_message.content).substring(0,300);}\n}\nconst parse=s=>{const t=String(s||'').replace(/```[a-zA-Z]*/g,'').trim();const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)return null;try{const o=JSON.parse(t.slice(a,b+1));return(o&&typeof o==='object'&&!Array.isArray(o)&&typeof o.status==='string'&&Array.isArray(o.files))?o:null;}catch(e){return null;}};\nlet result=null;\nfor(const m of msgs){const c=m&&m.assistant_message&&m.assistant_message.content;if(typeof c==='string'&&c.trim()){result=parse(c);if(result)break;}}\nconst errMsg=e=>e?String((e&&e.message)||JSON.stringify(e)).substring(0,150):'';\nconst files=Array.isArray(dr.files)?dr.files:[];\nconst names=files.map(f=>(f&&f.name)||'').filter(n=>n&&n!=='00_INFO.txt');\nconst cnt=re=>names.filter(n=>re.test(n)).length;\nconst png=cnt(/\\.png$/i),pdf=cnt(/\\.pdf$/i),svg=cnt(/\\.svg$/i);\nconst exp=Array.isArray(ctx.expected_files)?ctx.expected_files:[];\nconst missing=exp.filter(n=>names.indexOf(n)===-1);\nlet driveOk=false;\nif(KIND==='image')driveOk=png>=Math.max(1,exp.length);\nelse if(KIND==='carousel')driveOk=pdf>=1&&png>=1;\nelse if(KIND==='infographic')driveOk=png>=1;\nelse if(KIND==='ebook')driveOk=pdf>=1;\nelse if(KIND==='posts')driveOk=png>=3;\nconst driveSummary=names.length+' file(s): '+png+' PNG, '+pdf+' PDF, '+svg+' SVG'+(missing.length?'; missing by name: '+missing.join(', '):'')+(dr.error?'; Drive list failed: '+errMsg(dr.error):'');\nconst jsonOk=!!result&&result.status.trim().toLowerCase()==='done';\nconst jsonSummary=result?('status '+result.status+', '+result.files.length+' file(s) listed'+(result.notes?', notes: '+String(result.notes).substring(0,300):'')):('no parseable JSON'+(agent?' (agent status: '+agent+')':'')+(mr.error?'; listMessages failed: '+errMsg(mr.error):''));\nlet state='wait',reason='';\nif(jsonOk&&driveOk){state='ready';}\nelse if(agent==='error'){state='error';reason='Manus task errored'+(errText?': '+errText:'');}\nelse if(agent==='waiting'){state='error';reason='Manus is waiting for input'+(waitWhy?' ('+waitWhy+')':'')+'. Answer or stop the task in Manus.';}\nelse if(result&&!jsonOk){state='error';reason='Manus reported status '+result.status+(result.notes?': '+String(result.notes).substring(0,300):'');}\nelse if(ctx.elapsed_min>=TIMEOUT_MIN){state='error';reason='Timed out after '+ctx.elapsed_min+' min ('+(result?'JSON result read':'no parseable JSON result')+', '+(driveOk?'files present':'files incomplete')+')';}\nreturn{json:{...ctx,state,reason,drive_ok:driveOk,json_ok:jsonOk,drive_summary:driveSummary,json_summary:jsonSummary,agent_status:agent}};"
+      },
+      "id": "c48ee82b-bf55-4177-b51f-cc894b53c6fb",
+      "name": "P7. Evaluate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "fin",
+              "leftValue": "={{ $json.state }}",
+              "operator": {
+                "operation": "notEquals",
+                "type": "string"
+              },
+              "rightValue": "wait"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "4d09de33-b843-4560-acab-2196d6622b9e",
+      "name": "P8. Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1264,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "49fd7456-df3d-44aa-b3a4-fca1cc1e4571",
+      "name": "P9. Re-read Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const NOTES_FIELD='Notes';\nconst PROC='eBook Processing';\nconst SEP='==============================';\nconst esc=s=>String(s).replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');\nconst sy=$now.setZone('Australia/Sydney');\nconst ts=sy.toFormat('yyyy-MM-dd HH:mm')+' '+(sy.offset===660?'AEDT':'AEST')+' / '+$now.setZone('Asia/Manila').toFormat('yyyy-MM-dd HH:mm')+' PHT';\nconst items=$input.all();\nconst out=[];\nfor(let i=0;i<items.length;i++){\n  const raw=items[i].json||{};\n  const rec=raw.fields?{...raw.fields,id:raw.id}:raw;\n  let ctx=null;\n  try{ctx=$('P7. Evaluate').itemMatching(i).json;}catch(e){ctx=null;}\n  if(!ctx||!rec.id)continue;\n  const st=(rec.Status&&typeof rec.Status==='object')?rec.Status.name:rec.Status;\n  const notes=String(rec[NOTES_FIELD]||'');\n  const cur=notes.match(new RegExp(esc(SEP)+'\\n'+esc(ctx.stage_tag)+'\\n([^]*?)(?=\\n'+esc(SEP)+'\\n|$)'));\n  if(st!==PROC||!cur||!/^Stage: Waiting for Manus$/m.test(cur[1])||cur[1].indexOf('Manus Task ID: '+ctx.manus_task_id)===-1)continue;\n  const base=notes.replace(new RegExp('\\n*'+esc(SEP)+'\\n'+esc(ctx.stage_tag)+'\\n[^]*?(?=\\n'+esc(SEP)+'\\n|$)','g'),'').trim();\n  const lines=[SEP,ctx.stage_tag,'Updated: '+ts,ctx.state==='ready'?'Stage: Ready - Manus JSON result read and files verified in Drive':'Stage: Error - '+ctx.reason,'Skill: '+ctx.skill_line,'Source: '+ctx.source_line,'Drive folder: '+ctx.drive_folder_url,'Files in Drive: '+ctx.drive_summary,'Manus result: '+ctx.json_summary,'Run time: '+ctx.elapsed_min+' min','Manus Task ID: '+ctx.manus_task_id,'Manus Task URL: '+ctx.manus_task_url];\n  out.push({json:{record_id:rec.id,cfg:ctx.cfg,state:ctx.state,drive_folder_url:ctx.drive_folder_url,final_notes:(base?base+'\\n\\n':'')+lines.join('\\n')}});\n}\nreturn out;"
+      },
+      "id": "28283d58-8f48-4183-a250-ceb995c4f39a",
+      "name": "P10. Build Final Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "rdy",
+              "leftValue": "={{ $json.state }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "ready"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "688f244e-325b-41ed-a83e-78afdfba3392",
+      "name": "P11. Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1936,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Notes": "={{ $json.final_notes }}",
+            "Output Folder URL": "={{ $json.drive_folder_url }}",
+            "Status": "eBook Ready",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "c580fe8e-1dd6-4fc6-b05f-71a7c085915f",
+      "name": "P12. Mark eBook Ready",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        608
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblbnlPeQbK1owFTY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Notes": "={{ $json.final_notes }}",
+            "Status": "Error - eBook Generation Failed",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "7dcddeab-b711-4c63-a703-7e1fc0cf3be7",
+      "name": "P12e. Mark Error",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        800
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Output_Type}='ebook'",
+        "options": {}
+      },
+      "id": "228d0598-df24-42b1-a260-1ca057a03d6d",
+      "name": "P1b. Load Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -192,
+        848
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "3. Extract Record": {
+      "main": [
+        [
+          {
+            "node": "4. Mark Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Mark Processing": {
+      "main": [
+        [
+          {
+            "node": "4b. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4c. Prepare Subfolder Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Prepare Subfolder Name": {
+      "main": [
+        [
+          {
+            "node": "4d. Create Drive Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Create Drive Subfolder": {
+      "main": [
+        [
+          {
+            "node": "4e. Extract Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Extract Folder ID": {
+      "main": [
+        [
+          {
+            "node": "5. Has Source?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Has Source?": {
+      "main": [
+        [
+          {
+            "node": "6. Build Manus Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. No Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Build Manus Message": {
+      "main": [
+        [
+          {
+            "node": "6b. Resolve Skill ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Resolve Skill ID": {
+      "main": [
+        [
+          {
+            "node": "6c. Pick Skill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Pick Skill": {
+      "main": [
+        [
+          {
+            "node": "6d. Append Output Contract",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Submit to Manus": {
+      "main": [
+        [
+          {
+            "node": "8. Extract Task ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Load Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Load Outputs": {
+      "main": [
+        [
+          {
+            "node": "0c. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0d. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Ready Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready Records": {
+      "main": [
+        [
+          {
+            "node": "1a. Has Records?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1a. Has Records?": {
+      "main": [
+        [
+          {
+            "node": "1b. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. No Source": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Extract Task ID": {
+      "main": [
+        [
+          {
+            "node": "8h. Build Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8h. Build Folder Note": {
+      "main": [
+        [
+          {
+            "node": "8i. Write Folder Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8i. Write Folder Note": {
+      "main": [
+        [
+          {
+            "node": "8j. Restore After Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8j. Restore After Note": {
+      "main": [
+        [
+          {
+            "node": "9. Record Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. Build Failure": {
+      "main": [
+        [
+          {
+            "node": "Err. Manus Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. Manus Failed": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1c. Production Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Production Approved?": {
+      "main": [
+        [
+          {
+            "node": "3. Extract Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1d. Re-read Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d. Re-read Record": {
+      "main": [
+        [
+          {
+            "node": "1e. Build Idea Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1e. Build Idea Note": {
+      "main": [
+        [
+          {
+            "node": "1f. Back to Idea",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1f. Back to Idea": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Record Dispatch": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d. Append Output Contract": {
+      "main": [
+        [
+          {
+            "node": "7. Submit to Manus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P0. Every 2 Minutes": {
+      "main": [
+        [
+          {
+            "node": "P1. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P2. Build Poll Config": {
+      "main": [
+        [
+          {
+            "node": "P3. Get Processing Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P3. Get Processing Records": {
+      "main": [
+        [
+          {
+            "node": "P4. Parse Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P4. Parse Dispatch": {
+      "main": [
+        [
+          {
+            "node": "P5. List Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P5. List Messages": {
+      "main": [
+        [
+          {
+            "node": "P6. List Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P6. List Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "P7. Evaluate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P7. Evaluate": {
+      "main": [
+        [
+          {
+            "node": "P8. Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P8. Finished?": {
+      "main": [
+        [
+          {
+            "node": "P9. Re-read Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P9. Re-read Record": {
+      "main": [
+        [
+          {
+            "node": "P10. Build Final Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P10. Build Final Notes": {
+      "main": [
+        [
+          {
+            "node": "P11. Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P11. Ready?": {
+      "main": [
+        [
+          {
+            "node": "P12. Mark eBook Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "P12e. Mark Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P1. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "P1b. Load Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P1b. Load Outputs": {
+      "main": [
+        [
+          {
+            "node": "P2. Build Poll Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "30be54bb-88a8-4add-8520-d841d7b4ca9d",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "7BhicV60l0J5lbYZ",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

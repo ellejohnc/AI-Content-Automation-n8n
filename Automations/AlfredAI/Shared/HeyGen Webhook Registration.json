@@ -1,0 +1,234 @@
+{
+  "name": "HeyGen Webhook Registration",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ea15fb68-cacb-40ba-88dd-6c3c78f1921a",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        16,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.heygen.com/v1/webhook/endpoint.add",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "sk_V2_hgu_kM1YEl2YNnY_svqnMyzBZM56i9lmajIieZEAbuwBJFFN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: 'https://marketing.alfredai.bot/webhook/heygen-callback', events: ['avatar_video.success', 'avatar_video.fail'] }) }}",
+        "options": {}
+      },
+      "id": "862717ae-a5a5-4e9a-8339-04f9c521a42c",
+      "name": "1. Register Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.item.json;\n\nconst success = response.error === null || response.error === undefined;\nconst endpointId = response.data?.endpoint_id || response.endpoint_id || '';\n\nif (!success) {\n  return { json: {\n    status: 'FAILED',\n    message: 'Registration failed: ' + JSON.stringify(response.error),\n    next_step: 'Check your API key and webhook URL'\n  }};\n}\n\nreturn { json: {\n  status: 'SUCCESS',\n  endpoint_id: endpointId,\n  message: 'Webhook registered successfully. Save the endpoint_id below for future reference.',\n  events_subscribed: ['avatar_video.success', 'avatar_video.fail'],\n  next_step: 'Activate the HeyGen Webhook node in WF06 and enable the workflow.'\n}};\n"
+      },
+      "id": "93651034-ae1f-4dcc-b7c2-cab21d2f60bb",
+      "name": "2. Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.heygen.com/v1/webhook/endpoint.list",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "sk_V2_hgu_kM1YEl2YNnY_svqnMyzBZM56i9lmajIieZEAbuwBJFFN"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7df3c478-daf3-445c-a97a-036d3201bc09",
+      "name": "3. Verify Registration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const listResponse = $input.item.json;\nconst registerData = $('2. Parse Response').first().json;\n\n// HeyGen list endpoint returns data as a direct array\nconst endpoints = Array.isArray(listResponse.data) ? listResponse.data : [];\nconst ourEndpoint = endpoints.find(e => e.url && e.url.includes('heygen-callback'));\n\n// Also check by endpoint_id in case URL matching fails\nconst byId = endpoints.find(e => e.endpoint_id === registerData.endpoint_id);\nconst found = ourEndpoint || byId;\n\nreturn { json: {\n  registration_status: registerData.status,\n  endpoint_id: registerData.endpoint_id,\n  verified_in_heygen: found ? 'YES ✅' : 'NOT FOUND ❌',\n  registered_url: found?.url || 'not found',\n  subscribed_events: found?.events || 'all events (null = subscribes to everything)',\n  webhook_status: found?.status || 'unknown',\n  total_webhooks_registered: endpoints.length,\n  all_endpoints: endpoints.map(e => ({ id: e.endpoint_id, url: e.url, status: e.status })),\n  message: found\n    ? 'Webhook is live ✅ HeyGen will call n8n when videos complete.'\n    : 'Registration returned SUCCESS but endpoint not in list. It may still be active — check endpoint_id: ' + registerData.endpoint_id\n}};\n"
+      },
+      "id": "36b15d2a-1946-413c-9be8-6634c4f21208",
+      "name": "4. Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "https://api.heygen.com/v1/webhook/endpoint.delete?endpoint_id=f53b72be3a954e91946f5bc79f305d54",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "sk_V2_hgu_kM1YEl2YNnY_svqnMyzBZM56i9lmajIieZEAbuwBJFFN"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "92c3084e-9d4b-4744-a717-76692af0d4ad",
+      "name": "5. Delete Old Endpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.item.json;\nconst success = response.code === 100 || response.error === null || !response.error;\n\nreturn { json: {\n  old_endpoint_deleted: success ? 'YES ✅' : 'FAILED ❌',\n  active_endpoint_id: 'cecc0cfecff24be5bed45ec5f4ab2495',\n  active_url: 'https://marketing.alfredai.bot/webhook/heygen-callback',\n  message: success\n    ? 'Clean. One webhook active. HeyGen will call n8n once per video completion.'\n    : 'Delete failed — manually delete endpoint f53b72be from HeyGen dashboard or re-run.'\n}};\n"
+      },
+      "id": "20433a03-e5f3-4c80-baad-03795e475599",
+      "name": "6. Confirm Cleanup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        -224
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Register Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Register Webhook": {
+      "main": [
+        [
+          {
+            "node": "2. Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Parse Response": {
+      "main": [
+        [
+          {
+            "node": "3. Verify Registration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Verify Registration": {
+      "main": [
+        [
+          {
+            "node": "4. Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Summary": {
+      "main": [
+        [
+          {
+            "node": "5. Delete Old Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Delete Old Endpoint": {
+      "main": [
+        [
+          {
+            "node": "6. Confirm Cleanup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "8ea84f8a-b470-481f-acc2-b7f9f1621490",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "g2Gl3fiwdOBXs7Ql",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}

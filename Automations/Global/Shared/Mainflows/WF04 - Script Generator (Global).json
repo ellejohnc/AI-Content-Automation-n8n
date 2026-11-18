@@ -1,0 +1,1030 @@
+{
+  "name": "WF04 - Script Generator (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "f22735c5-b843-48ed-9b65-7f200080071d",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        3504,
+        -1296
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "47a9c766-f1cb-461e-9b22-1714562017d0",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        3504,
+        -1488
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND(NOT({Topic} = ''), NOT({Platform} = ''), NOT({Content Type} = ''), OR({Status} = 'Ready for Script', AND({Status} = 'Script Done', {Script_Approval} = 'Revision Required', OR(NOT({Script_Feedback} = ''), {Script_Revision_Count} >= 1))))",
+        "options": {}
+      },
+      "id": "dd214c39-89ae-4849-a63e-c9e854839512",
+      "name": "1. Get Ready for Script Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4624,
+        -1664
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "728dc492-28e3-4bdb-88c5-ade7ba5e07ad",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5072,
+        -1664
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "49ad06c9-777a-4f69-af3c-b29563d1ba27",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4624,
+        -1472
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "filterByFormula": "{Processed} = TRUE()",
+        "options": {}
+      },
+      "id": "cafc902c-62d4-43c8-81cb-983eaf911305",
+      "name": "2. Get Viral Patterns & Transcripts",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        5296,
+        -1664
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Renders the script prompt from CONTROL config. No prompt text lives in this node.\n// Records come from 1d. Approval Check (route = generate only), NOT from $input - node 2 sits between them and\n// returns Viral Library rows, so $input here is patterns, not Reel Engine records.\n// Records held at a gate (not approved, second rejection) never reach the model call.\n// A fixed source-use guard is appended to every rendered prompt so the reference\n// transcript cannot be reproduced regardless of which skill template is configured.\n// mode = regenerate appends the previous script and Script_Feedback (one automatic rewrite, T-43).\n\nconst records = $('1d. Approval Check').all().map(i => i.json).filter(r => r && r.id && r.route === 'generate');\nconst patterns = $('2. Get Viral Patterns & Transcripts').all();\n\nfunction withDefaults(obj, cfg) {\n  const s = (cfg || {}).script || {};\n  return {\n    model: s.model || 'gpt-4.1-mini',\n    temperature: (s.temperature !== undefined && s.temperature !== null) ? s.temperature : 0.7,\n    max_tokens: s.max_tokens || 2500,\n    system_prompt: s.system_prompt || '',\n    words_per_minute: s.words_per_minute || 130,\n    max_script_chars: s.max_script_chars || 5000,\n    prompt: '',\n    ...obj\n  };\n}\n\nif (!records.length) {\n  return [{ json: withDefaults({ _skip: true, cfg: {}, record_id: '', reason: 'No Reel Engine records reached this node.' }, {}) }];\n}\n\nconst usable = patterns.filter(p => {\n  const t = (p.json['Transcript'] || '').trim();\n  return t !== '' && t !== 'TRANSCRIPT_UNAVAILABLE';\n});\nconst pool = usable.length > 0 ? usable : patterns;\n\nconst out = [];\n\nfor (const record of records) {\n  const cfg = record.cfg || {};\n  const s = cfg.script || {};\n  const recordId = record.id || '';\n\n  if (!pool.length) {\n    out.push({ json: withDefaults({ _skip: true, cfg: cfg, record_id: recordId, reason: 'No viral patterns available.' }, cfg) });\n    continue;\n  }\n\n  const pattern = pool[Math.floor(Math.random() * pool.length)].json;\n\n  const contentType = record['Content Type'] || 'Video';\n  const platform    = record['Platform'] || 'YouTube';\n  const topic       = record['Topic'] || '';\n  const category    = (record['Category'] || '').trim();\n\n  const formats = s.formats || {};\n  const formatInstructions = formats[contentType] || formats['default'] || '';\n  const metadataInstructions = s.metadata_instructions || '';\n\n  const skills = s.skills || {};\n  const template = skills[category] || skills['default'] || '';\n\n  if (!template) {\n    const reason = 'No script skill configured for category \"' + (category || 'none') + '\" on client ' + (cfg.client_name || 'unknown') + '. Check Config_JSON on the {Client}::script row.';\n    console.log('[3] ' + reason);\n    out.push({ json: withDefaults({ _skip: true, cfg: cfg, record_id: recordId, reason: reason }, cfg) });\n    continue;\n  }\n\n  const archetypes = Array.isArray(s.hook_archetypes) ? s.hook_archetypes : [];\n  const selectedHook = archetypes.length ? archetypes[Math.floor(Math.random() * archetypes.length)] : {};\n  const implications = Array.isArray(s.implication_phrases) ? s.implication_phrases : [];\n  const selectedImplication = implications.length ? implications[Math.floor(Math.random() * implications.length)] : '';\n\n  const transcriptChars = s.transcript_chars || 2000;\n  const vars = {\n    topic: topic,\n    platform: platform,\n    category: category,\n    content_type: contentType,\n    brand: cfg.brand_name || cfg.client_name || '',\n    client: cfg.client_name || '',\n    skill_name: cfg.skill_name || '',\n    pattern: pattern['Reusable_Pattern'] || 'Hook > Value > CTA',\n    hook_type: pattern['Hook Type'] || '',\n    structure_tag: pattern['Structure_Tag'] || '',\n    transcript: String(pattern['Transcript'] || '').substring(0, transcriptChars),\n    format_instructions: formatInstructions,\n    metadata_instructions: metadataInstructions,\n    hook_archetype_name: selectedHook.name || '',\n    hook_archetype_style: selectedHook.style || '',\n    hook_archetype_instruction: selectedHook.instruction || '',\n    implication_phrase: selectedImplication\n  };\n\n  const render = (tpl) => String(tpl).replace(/\\{\\{\\s*([A-Za-z_]+)\\s*\\}\\}/g, (m, k) => {\n    const key = k.toLowerCase();\n    return Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : m;\n  });\n\n  // Fixed guard, always appended. The reference transcript belongs to another creator.\n  const sourceGuard = s.source_guard || ('\\n\\nSOURCE USE - NON-NEGOTIABLE:\\n'\n    + 'The reference transcript above is another creator\\'s published work. It is a STRUCTURAL reference only.\\n'\n    + '- Take from it only the hook archetype, pacing, scene order and rhetorical shape.\\n'\n    + '- Do NOT reuse its sentences, phrasing, examples, analogies, statistics, or specific claims.\\n'\n    + '- Do NOT paraphrase it line by line. Do NOT produce a reworded version of it.\\n'\n    + '- Every fact and figure in your script must come from the TOPIC and your own knowledge, not from the transcript.\\n'\n    + '- The finished script must stand on its own and must not be recognisable as a rewrite of the source.\\n'\n    + 'If the transcript is about a different subject than the TOPIC, use only its shape and write entirely fresh content.');\n\n  // T-43: one automatic rewrite from the reviewer's feedback.\n  let revision = '';\n  if (record.mode === 'regenerate') {\n    revision = '\\n\\nREVISION REQUEST - NON-NEGOTIABLE:\\n'\n      + 'Rewrite this script applying the reviewer\\'s feedback. Keep the output format, bracketed scene labels, scene table and metadata lines required above. '\n      + 'Address every point in the feedback and keep what the reviewer did not object to.\\n\\n'\n      + 'PREVIOUS SCRIPT:\\n' + String(record['Script'] || '').trim()\n      + '\\n\\nREVIEWER FEEDBACK:\\n' + String(record['Script_Feedback'] || '').trim();\n  }\n\n  out.push({ json: withDefaults({\n    _skip: false,\n    cfg: cfg,\n    record_id: recordId,\n    mode: record.mode || 'first',\n    topic: topic,\n    platform: platform,\n    category: category,\n    content_type: contentType,\n    pattern_name: pattern['Reusable_Pattern'] || 'Unknown Pattern',\n    prompt: render(template) + sourceGuard + revision\n  }, cfg) });\n}\n\nconsole.log('[3] Records: ' + records.length + ' | Prompts built: ' + out.filter(o => !o.json._skip).length + ' | Rewrites: ' + records.filter(r => r.mode === 'regenerate').length);\nreturn out;"
+      },
+      "id": "652c840a-78e5-4a5c-8241-54152c66b7d8",
+      "name": "3. Build Viral-Aware Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        -1664
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json.model) }},\n  \"messages\": [\n    { \"role\": \"system\", \"content\": {{ JSON.stringify($json.system_prompt) }} },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify($json.prompt) }} }\n  ],\n  \"temperature\": {{ $json.temperature }},\n  \"max_tokens\": {{ $json.max_tokens }}\n}",
+        "options": {}
+      },
+      "id": "d382867e-3428-467a-8049-2ba44a37ecac",
+      "name": "4. Generate Script (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        5968,
+        -1760
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "x9t1HtZVkPLKi1dp",
+          "name": "OpenAI Bearer Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\nconst promptData = $('3. Build Viral-Aware Prompt').item.json;\nconst cfg = promptData.cfg || {};\nconst s = cfg.script || {};\n\nlet fullResponse = '';\ntry {\n  fullResponse = response.choices[0].message.content || '';\n} catch (e) {\n  fullResponse = 'ERROR: Script generation failed. Please retry.';\n}\n\nconst extractField = (text, field) => {\n  const lines = String(text).split('\\n');\n  const fieldUpper = field.toUpperCase();\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i].trim();\n    if (line.toUpperCase().startsWith(fieldUpper + ':')) {\n      let value = line.substring(line.indexOf(':') + 1).trim();\n      for (let j = i + 1; j < lines.length; j++) {\n        const next = lines[j].trim();\n        if (!next) break;\n        if (/^[A-Z][A-Z_]+:/.test(next)) break;\n        value += '\\n' + next;\n      }\n      return value.replace(/^\\[.*?\\]$/, '').trim();\n    }\n  }\n  return '';\n};\n\nconst metadataStart = fullResponse.search(/\\n(?:INSTAGRAM_CAPTION|TIKTOK_CAPTION|LINKEDIN_CAPTION|YOUTUBE_CAPTION|MANYCHAT_COPY|HOOK_TYPE|THUMBNAIL|TAGS)[:\\s]/i);\nlet rawScript = metadataStart > -1 ? fullResponse.substring(0, metadataStart).trim() : fullResponse.trim();\nconst metadataBlock = metadataStart > -1 ? fullResponse.substring(metadataStart) : '';\n\n// The skills ask for a scene reference table after the script. It sits between the last\n// bracketed label and the metadata, so its words must be removed BEFORE scene durations\n// are measured or the final scene absorbs the whole table.\nconst rawTableStart = rawScript.search(/\\n\\s*\\|/);\nif (rawTableStart > -1) rawScript = rawScript.substring(0, rawTableStart).trim();\n\nconst sceneLabelMap = s.scene_labels || {};\n\nconst allLabelMatches = [...rawScript.matchAll(/^\\*{0,2}\\[([A-Z][A-Z\\s\\/]+)\\]\\*{0,2}\\s*$/gm)];\nconst WORDS_PER_SECOND = (promptData.words_per_minute || 130) / 60;\nlet productionBrief = '';\n\nif (allLabelMatches.length > 0) {\n  const scenes = [];\n  for (let i = 0; i < allLabelMatches.length; i++) {\n    const labelRaw = allLabelMatches[i][1].trim();\n    const label = sceneLabelMap[labelRaw] || labelRaw;\n    const start = allLabelMatches[i].index + allLabelMatches[i][0].length;\n    const end = i + 1 < allLabelMatches.length ? allLabelMatches[i + 1].index : rawScript.length;\n    const sceneText = rawScript.substring(start, end).trim();\n    const wordCount = sceneText.split(/\\s+/).filter(w => w.length > 0).length;\n    scenes.push({ label: label, wordCount: wordCount });\n  }\n  let cursor = 0;\n  const briefLines = scenes.map(sc => {\n    const duration = sc.wordCount / WORDS_PER_SECOND;\n    const startSec = Math.round(cursor);\n    cursor += duration;\n    const endSec = Math.round(cursor);\n    return sc.label + ': ' + startSec + '-' + endSec + 's';\n  });\n  productionBrief = briefLines.join('\\n');\n}\n\nlet script = rawScript\n  .replace(/^.*?(?:script|reel|short|video)[^\\n]*?-{2,}\\s*\\n?/i, '')\n  .replace(/^\\*{0,2}\\[[\\w\\s\\/]+\\]\\*{0,2}\\s*\\n?/gm, '')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nconst tableStart = script.search(/\\n\\|[\\s\\w]+\\|/);\nif (tableStart > -1) script = script.substring(0, tableStart).trim();\n\nconst maxChars = promptData.max_script_chars || 5000;\nif (script.length > maxChars) script = script.substring(0, maxChars).trimEnd();\n\nconst instagramCaption = extractField(metadataBlock || fullResponse, 'INSTAGRAM_CAPTION');\nconst linkedinCaption  = extractField(metadataBlock || fullResponse, 'LINKEDIN_CAPTION');\nconst hookType         = extractField(metadataBlock || fullResponse, 'HOOK_TYPE');\nconst thumbnailIdea    = extractField(metadataBlock || fullResponse, 'THUMBNAIL');\n\nconst topic = String(promptData.topic || '').toLowerCase();\nconst existingCategory = String(promptData.category || '').trim();\nconst scriptLower = script.toLowerCase();\nconst topicAndScript = topic + ' ' + scriptLower.substring(0, 500);\n\nconst categoryKeywords = s.category_keywords || {};\nlet detectedCategory = existingCategory;\nconst shouldAutoDetect = !existingCategory || existingCategory === 'Other';\n\nif (shouldAutoDetect) {\n  detectedCategory = s.default_category || 'Other';\n  for (const cat of Object.keys(categoryKeywords)) {\n    const kws = categoryKeywords[cat] || [];\n    if (kws.some(kw => topicAndScript.includes(String(kw).toLowerCase()))) { detectedCategory = cat; break; }\n  }\n}\n\nconst categoryChanged = detectedCategory !== existingCategory;\n\nconst tagKeywords = s.tag_keywords || {};\nconst categoryToTag = s.category_to_tag || {};\nconst assigned = [];\nfor (const tag of Object.keys(tagKeywords)) {\n  const kws = tagKeywords[tag] || [];\n  const byCategory = categoryToTag[detectedCategory] === tag;\n  if (byCategory || kws.some(kw => topic.includes(String(kw).toLowerCase()))) assigned.push(tag);\n}\nif (assigned.length === 0) assigned.push(s.default_tag || 'Other');\n\nreturn { json: {\n  cfg:               cfg,\n  record_id:         promptData.record_id,\n  script:            script,\n  production_brief:  productionBrief,\n  pattern_used:      promptData.pattern_name,\n  tags:              assigned,\n  detected_category: detectedCategory,\n  category_changed:  categoryChanged,\n  instagram_caption: instagramCaption,\n  linkedin_caption:  linkedinCaption,\n  hook_type:         hookType,\n  thumbnail_idea:    thumbnailIdea\n} };"
+      },
+      "id": "73ae436b-cb5d-4b19-8c69-7195d013b8d4",
+      "name": "5. Preserve Data + Extract Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6192,
+        -1760
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "92952ccf-13d0-4877-b08a-780f77f42a0a",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        3728,
+        -1392
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Enabled}",
+        "options": {}
+      },
+      "id": "a99913e6-5f15-41fd-afe0-f831ec0313a7",
+      "name": "0a2. Load Client Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        3952,
+        -1392
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Swappable config comes from CONTROL as JSON, not from hardcoded values in this workflow.\n// Clients.Config_JSON = client-wide defaults.\n// Client_Outputs.Config_JSON where Key = '{Client}::script' = per-output override (shallow merge, output wins).\nconst OUTPUT_TYPE = 'script';\n\nfunction parseJson(raw, label) {\n  if (!raw) return {};\n  try {\n    const v = JSON.parse(raw);\n    if (v && typeof v === 'object' && !Array.isArray(v)) return v;\n    console.log('[0b] Config_JSON on ' + label + ' is not an object, ignoring');\n    return {};\n  } catch (e) {\n    console.log('[0b] Invalid Config_JSON on ' + label + ': ' + e.message);\n    return {};\n  }\n}\n\nconst outputs = $input.all().map(i => i.json);\nconst clients = $('0a. Load Clients').all().map(i => i.json);\n\nconst outByKey = {};\nfor (const o of outputs) {\n  const key = (o['Key'] || '').trim().toLowerCase();\n  if (key) outByKey[key] = o;\n}\n\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) { console.log('[0b] ' + name + ' has no Video_Base_ID, skipping'); continue; }\n\n  const clientCfg = parseJson(c['Config_JSON'], name);\n  const o = outByKey[(name + '::' + OUTPUT_TYPE).toLowerCase()] || null;\n  const outputCfg = o ? parseJson(o['Config_JSON'], name + '::' + OUTPUT_TYPE) : {};\n  if (!o) console.log('[0b] No Client_Outputs row for ' + name + '::' + OUTPUT_TYPE + ', using client-level config only');\n\n  const merged = { ...clientCfg, ...outputCfg };\n\n  out.push({ json: {\n    ...merged,\n    client_name:      name,\n    video_base_id:    c['Video_Base_ID'],\n    brand_name:       c['Brand_Name'] || name,\n    notes_stage_tag:  c['Notes_Stage_Tag'] || '',\n    variation_count:  c['Variation_Count'] || null,\n    output_type:      OUTPUT_TYPE,\n    manus_project_id: o ? (o['Manus_Project_ID'] || '') : '',\n    skill_name:       o ? (o['Skill_Name'] || '') : '',\n    skill_fallback:   o ? (o['Skill_Fallback'] || '') : ''\n  } });\n}\n\nconsole.log('[0b] Clients to process: ' + out.length);\nreturn out;"
+      },
+      "id": "5339dcc4-6f3b-4eb1-a11a-0109f806e893",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4176,
+        -1392
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "4eb8621a-4e89-4217-9fb1-94683f099608",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4400,
+        -1392
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\n// started_at is captured here so the notes block can report how long the run took.\nreturn { json: { ...$input.item.json, cfg, started_at: new Date().toISOString() } };"
+      },
+      "id": "481b7d64-0bed-4d54-b96b-77dd08d987d7",
+      "name": "1c. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        -1664
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasprompt",
+              "leftValue": "={{ $json._skip }}",
+              "operator": {
+                "operation": "false",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b6a77307-7e87-4e1f-82dc-e4c0f8fb934e",
+      "name": "3b. Has Skill Prompt?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5744,
+        -1664
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Category": "={{ $json.detected_category }}",
+            "Instagram_Caption": "={{ $json.instagram_caption }}",
+            "LinkedIn_Caption": "={{ $json.linkedin_caption }}",
+            "Production_Brief": "={{ $json.production_brief }}",
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Script": "={{ $json.script }}",
+            "Status": "Script Done",
+            "Tags": "={{ $json.tags }}",
+            "id": "={{ $json.record_id }}",
+            "Script_Approval": "Pending",
+            "Script_Revision_Count": "={{ $json.script_revision_count }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "80cf8cd6-0cec-4222-8559-9e1a4702145b",
+      "name": "6. Update Reel Engine",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        6864,
+        -1760
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Status": "Error - No Script",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "ad74072f-7901-4fb0-933b-f388bc987628",
+      "name": "6b. Mark Script Error",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        6864,
+        -1568
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "189321df-0ff6-4218-b6f3-4a37206d4201",
+      "name": "7. Script Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        7088,
+        -1568
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "2b6107d1-a377-4ff6-9d75-8a1399108235",
+      "name": "5z. Fetch Existing Reel Notes",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        6416,
+        -1760
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Tagged-block write: strip only this stage's block, keep every other stage's notes.\nconst fresh = $input.item.json || {};\nconst d = $('5. Preserve Data + Extract Script').item.json;\nconst cfg = d.cfg || {};\nconst s = cfg.script || {};\n\n// T-43: gate mode by record ID from 1d. Fail closed - without it the revision count cannot be set safely.\nconst gate = $('1d. Approval Check').all().map(i => i.json).find(r => r.id === d.record_id);\nif (!gate) throw new Error('5y: no Approval Check entry for record ' + d.record_id);\nconst mode = gate.mode || 'first';\nconst prevCount = Number(gate['Script_Revision_Count'] || 0);\nconst revisionCount = mode === 'regenerate' ? 1 : prevCount;\n\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = s.notes_separator || '==============================';\nconst STAGE_TAG = s.stage_tag || 'SCRIPT (WF04)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(STAGE_TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst notesBase = freshNotes.replace(blockRe, '').trim();\n\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('1c. Attach Config').first().json.started_at || '';\n  triggered = raw ? raw.substring(0, 16).replace('T', ' ') : '';\n  const st = Date.parse(raw);\n  if (st) { const secs = Math.max(0, Math.round((Date.now() - st) / 1000)); runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'; }\n} catch (e) {}\n\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + STAGE_TAG\n  + '\\nTriggered: ' + triggered\n  + '\\nUpdated: ' + stamp\n  + '\\nRun time: ' + runtime\n  + '\\nStage: Complete'\n  + '\\nScript_Approval: Pending' + (mode === 'regenerate' ? ' (revision 1 from Script_Feedback)' : ' (first script)')\n  + '\\nPattern: ' + (d.pattern_used || '')\n  + '\\nHook Type: ' + (d.hook_type || '')\n  + '\\nCategory: ' + (d.detected_category || '') + (d.category_changed ? ' (auto-detected)' : '')\n  + '\\nThumbnail: ' + (d.thumbnail_idea || '')\n  + '\\n\\n--- INSTAGRAM ---\\n' + (d.instagram_caption || '')\n  + '\\n\\n--- LINKEDIN ---\\n' + (d.linkedin_caption || '');\n\nconst notesFinal = (notesBase ? notesBase + '\\n\\n' : '') + block;\n\nreturn { json: { ...d, mode: mode, script_revision_count: revisionCount, reel_notes_final: notesFinal, run_time: runtime } };"
+      },
+      "id": "27b6c5aa-ba3f-47d4-8204-40443246a4e8",
+      "name": "5y. Build Script Notes Block",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6640,
+        -1760
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-43 gate check. Gate 1: Production_Approval must be ticked before any script work.\n// Gate 2: Script_Approval = Revision Required -> one automatic rewrite from Script_Feedback, then manual edit.\n// Field NAMES only - field IDs differ per base.\nconst recs = $input.all().map(i => i.json).filter(r => r && r.id);\nconst out = recs.map(r => {\n  const sa = String(r['Script_Approval'] || '').trim();\n  const fb = String(r['Script_Feedback'] || '').trim();\n  const rc = Number(r['Script_Revision_Count'] || 0);\n  let route = 'generate', mode = 'first', note = '', status = '';\n  if (r['Production_Approval'] !== true) {\n    route = 'hold'; mode = 'unapproved'; note = 'Not approved for production: skipped'; status = 'Idea';\n  } else if (sa === 'Revision Required' && rc >= 1) {\n    route = 'hold'; mode = 'second_rejection'; note = 'Manual edit needed'; status = 'Needs Review';\n  } else if (sa === 'Revision Required' && fb) {\n    mode = 'regenerate';\n  } else if (sa === 'Revision Required') {\n    route = 'hold'; mode = 'no_feedback'; note = 'Manual edit needed: Revision Required with empty Script_Feedback'; status = 'Needs Review';\n  }\n  return { ...r, route: route, mode: mode, gate_note: note, gate_status: status, base_id: (r.cfg || {}).video_base_id || '' };\n});\nconst hasGenerate = out.some(o => o.route === 'generate');\nconsole.log('[1d] Records: ' + out.length + ' | generate: ' + out.filter(o => o.route === 'generate').length + ' | hold: ' + out.filter(o => o.route === 'hold').length);\nreturn out.map(o => ({ json: { ...o, has_generate: hasGenerate } }));"
+      },
+      "id": "1c6962f2-7d14-4b87-8df7-e36eb9d106b0",
+      "name": "1d. Approval Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5072,
+        -1888
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "isgen",
+              "leftValue": "={{ $json.route }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "generate"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "ead1dc39-8f86-4a75-9448-dc1cff45e845",
+      "name": "1e. Generate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5296,
+        -1888
+      ]
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "e216523e-5f1b-4411-af33-3ddceb1b8ec1",
+      "name": "1f. Fetch Notes (Hold)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        5520,
+        -2080
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// T-43 gate hold: no model call. Re-read notes, replace only the SCRIPT (WF04) block, set Status.\nconst fresh = $input.item.json || {};\nconst g = $('1e. Generate?').item.json;\nconst s = (g.cfg || {}).script || {};\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = s.notes_separator || '==============================';\nconst STAGE_TAG = s.stage_tag || 'SCRIPT (WF04)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(STAGE_TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst prevBlock = ((freshNotes.match(blockRe) || [''])[0] || '').trim();\nconst notesBase = freshNotes.replace(blockRe, '').trim();\n\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nlet block = sep + '\\n' + STAGE_TAG + '\\nUpdated: ' + stamp + '\\n' + g.gate_note;\nif (g.mode !== 'unapproved' && prevBlock) {\n  const prevBody = prevBlock.split('\\n').slice(2).filter(l => !/^(Triggered|Updated|Run time|Stage):/.test(l) && l.indexOf('Manual edit needed') !== 0).join('\\n').trim();\n  if (prevBody) block += '\\n\\n' + prevBody;\n}\nconst notesFinal = (notesBase ? notesBase + '\\n\\n' : '') + block;\n\nreturn { json: { record_id: g.id, base_id: g.base_id, gate_status: g.gate_status, mode: g.mode, has_generate: g.has_generate === true, reel_notes_final: notesFinal } };"
+      },
+      "id": "28e1897b-012b-476e-a330-d45cfcfc9881",
+      "name": "1g. Build Hold Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5744,
+        -2080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Status": "={{ $json.gate_status }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "c369de2f-34cb-461b-bc8b-a8c8b39a3c1e",
+      "name": "1h. Update Hold",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        5968,
+        -2080
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasgen",
+              "leftValue": "={{ $('1g. Build Hold Update').item.json.has_generate }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "d8ad6940-6cae-49ae-bdd5-98e8195a9907",
+      "name": "1i. Generate Branch Running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6192,
+        -2080
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2. Get Viral Patterns & Transcripts": {
+      "main": [
+        [
+          {
+            "node": "3. Build Viral-Aware Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Build Viral-Aware Prompt": {
+      "main": [
+        [
+          {
+            "node": "3b. Has Skill Prompt?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Generate Script (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "5. Preserve Data + Extract Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0a2. Load Client Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a2. Load Client Outputs": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Ready for Script Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready for Script Records": {
+      "main": [
+        [
+          {
+            "node": "1c. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "1d. Approval Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Has Skill Prompt?": {
+      "main": [
+        [
+          {
+            "node": "4. Generate Script (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6b. Mark Script Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Update Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "7. Script Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Mark Script Error": {
+      "main": [
+        [
+          {
+            "node": "7. Script Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Script Done": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Preserve Data + Extract Script": {
+      "main": [
+        [
+          {
+            "node": "5z. Fetch Existing Reel Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5z. Fetch Existing Reel Notes": {
+      "main": [
+        [
+          {
+            "node": "5y. Build Script Notes Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5y. Build Script Notes Block": {
+      "main": [
+        [
+          {
+            "node": "6. Update Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d. Approval Check": {
+      "main": [
+        [
+          {
+            "node": "1e. Generate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1e. Generate?": {
+      "main": [
+        [
+          {
+            "node": "2. Get Viral Patterns & Transcripts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1f. Fetch Notes (Hold)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1f. Fetch Notes (Hold)": {
+      "main": [
+        [
+          {
+            "node": "1g. Build Hold Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1g. Build Hold Update": {
+      "main": [
+        [
+          {
+            "node": "1h. Update Hold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1h. Update Hold": {
+      "main": [
+        [
+          {
+            "node": "1i. Generate Branch Running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1i. Generate Branch Running?": {
+      "main": [
+        null,
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "273da420-e336-4337-9fa3-4c27ef87ffc1",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "QTc3J30TVLbe2Keq",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

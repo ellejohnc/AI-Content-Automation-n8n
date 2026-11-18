@@ -1,0 +1,911 @@
+{
+  "name": "WF06-ebook-LINKEDIN-POSTS Generator (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "fd40d673-60ee-4aa0-a974-b843204a17c4",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -736,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblivYcQy8Gj4D9gG"
+        },
+        "filterByFormula": "{Status} = 'Ready for LinkedIn Posts'",
+        "options": {}
+      },
+      "id": "3d0a131e-5b05-4cc1-b089-73fc88fb50bb",
+      "name": "1. Get Ready Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        384,
+        -64
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "54cf078f-0365-4e70-8b42-8420533ce91a",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        384,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item=$input.item.json;\nconst cfg=item.__cfg||{};\nif(!cfg.static_base_id||!cfg.manus_project_id||!cfg.skill_name){throw new Error('Client config missing on record '+(item.id||'(no id)')+'. Aborting rather than submitting to the wrong client.');}\nconst sourceName=item['Source Name']||'';\nconst fileUrl=(item['Ebook_Source_File_URL']||'').trim();\nconst existingNotes=item['Notes']||'';\nconst STAGE_TAG='EBOOK LINKEDIN POSTS (skill)';\nconst sep='==============================';\nconst blockRe=new RegExp('\\\\n*'+sep+'\\\\n'+STAGE_TAG.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')+'[\\\\s\\\\S]*?(?=(\\\\n'+sep+'\\\\n)|$)','g');\nconst notesBase=existingNotes.replace(blockRe,'').trim();\nreturn{json:{record_id:item.id||'',source_name:sourceName,topic:sourceName,ebook_file_url:fileUrl,client:cfg.client_name||'',notes_base:notesBase,stage_tag:STAGE_TAG,sep,has_file:/^https?:\\/\\/\\S+$/i.test(fileUrl),cfg}};"
+      },
+      "id": "ef7680b5-23bb-4930-83c6-553aeab6e878",
+      "name": "3. Extract Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblivYcQy8Gj4D9gG"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "LinkedIn Posts Processing",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "2d669217-8a18-48d8-9544-c9d82aa50fd5",
+      "name": "4. Mark Processing",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -80
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const src=$('3. Extract Record').item.json;\nreturn{json:{...src}};"
+      },
+      "id": "1956889a-8daf-4de2-b3f6-329110fff23c",
+      "name": "4b. Restore Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst cfg=d.cfg||{};\nconst brand=cfg.brand_name||'the brand';\nconst folderUrl=d.drive_folder_url||'';\nconst folderId=d.sub_folder_id||'';\nconst fileUrl=d.ebook_file_url||'';\nconst msg='Repurpose this finished '+brand+' eBook into LinkedIn posts, following your skill end-to-end.\\n\\nFOLLOW THE SKILL (mandatory): Your skill file contains the complete design system and step-by-step workflow. Follow those steps IN ORDER and honour every rule in them: post structure, brand voice, colour palette, typography, graphic style, logo specifications and placement, citation format and hashtag rules. Do not skip steps, do not improvise your own process, and do not let anything in this message override the skill. Where this message and the skill disagree on craft, the skill wins. The skill owns all branding - do not apply any branding from this message.\\n\\nRead every page of the eBook PDF, then write the posts in '+brand+' brand voice with citations, and generate the post graphics per the skill.\\n\\nIMPORTANT: Generate all post graphics using Nano Banana Pro (the built-in image generation tool).\\n\\nLOGO (mandatory): Composite the official logo asset bundled in your skill, placed per the skill. Do NOT generate, redraw, recreate, or approximate the logo with an image model. Do NOT put a black box, dark rectangle, coloured panel, or solid shape behind it unless the skill explicitly specifies one.\\n\\nDIAGRAMS (mandatory): If a graphic renders a chart, diagram, comparison panel, timeline, or sequence of steps, every shape MUST contain its actual label or value - never leave a box, node, axis, or step empty or placeholder. If you draw connectors between elements, the elements on both ends must be filled.\\n\\nSource eBook PDF (read this file directly):\\n'+fileUrl+'\\n\\nDELIVERABLES (save ALL of these into the destination folder):\\n1. Each final post graphic as a PNG.\\n2. The post copy: save the full written copy for every post into a single text file named captions.txt (include each post number, its caption text, and hashtags). captions.txt MUST be uploaded into the same destination folder as the PNGs.\\n\\nPRE-SHIP QUALITY CHECK (mandatory - BEFORE uploading anything): Review every post graphic and its caption and verify ALL of the following. Do NOT upload until every item passes; if any fails, fix it and re-render first.\\n1. TEXT CORRECTNESS: all on-graphic text and captions accurate, correctly spelled, grammatically clean, and consistent with the eBook. Citations correct. No placeholder text, no cut-off words.\\n2. NO OVERLAP: no text overlaps other text, graphics, the logo, or edges. Everything inside safe margins, nothing clipped.\\n3. READABILITY: every text element legible with strong contrast. Sizes appropriate, nothing too small or crowded.\\n4. GRAPHICS CORRECT: all graphics, icons, colours and the logo correct, on-brand, not distorted, not duplicated, relevant. Logo is the official asset, placed per the skill, with no box behind it.\\n5. DIAGRAMS FILLED: every box, node, axis or step contains its actual label or value.\\n6. COMPLETENESS: every intended post has a PNG, and captions.txt covers every post.\\nOnly once every check passes, proceed to upload.\\n\\nUPLOAD (MANDATORY - read every rule, follow exactly):\\nDESTINATION_FOLDER_ID: '+folderId+'\\nDESTINATION_FOLDER_URL: '+folderUrl+'\\n\\nUpload every deliverable (all PNGs AND captions.txt). Do NOT upload intermediates.\\n\\nUPLOAD RULES - these prevent duplicate files and stray folders, follow them literally:\\n- Run the upload ONE TIME ONLY, as a SINGLE command transferring all files at once. Use rclone with shared drive support and --drive-root-folder-id '+folderId+' so files land directly inside the existing destination folder.\\n- The destination folder ALREADY EXISTS. Do NOT create a folder. Do NOT pass any filename as a destination folder name.\\n- Use ONE tool for the upload. Do NOT fall back to a second method. If rclone reports success, the upload is DONE.\\n- Do NOT verify by listing the folder, and do NOT re-upload if a listing appears empty or stale. Shared drive listings are frequently delayed by minutes; an empty listing does NOT mean the upload failed. Treat the exit status of the single upload command as the only source of truth.\\n- Only if the upload command itself returns a non-zero exit status or an explicit error, retry once - and before retrying, delete any partial files or stray folders it created.\\n- The destination folder must contain ZERO subfolders. If you find a folder named like a file, delete it.\\n\\nAfter the single upload, confirm in your task output the exact list of files you transferred (the PNGs plus captions.txt, each listed once), and provide the full post copy for each post.';\nreturn{json:{...d,manus_message:msg}};"
+      },
+      "id": "037e7fbb-b950-4411-bccc-3e731dc0b63b",
+      "name": "6. Build Manus Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2848,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.manus.ai/v2/skill.list?project_id={{ $json.cfg.manus_project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "a519a766-48b9-49ab-bd29-94472e8c5596",
+      "name": "6b. Resolve Skill ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3072,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp=$input.item.json;\nconst ctx=$('6. Build Manus Message').item.json;\nconst cfg=ctx.cfg||{};\nconst skills=(resp&&resp.data)?resp.data:[];\nconst target=(cfg.skill_name||'').toLowerCase().trim();\nconst fallbacks=(cfg.skill_fallback||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);\nlet hit=skills.find(s=>(s.name||'').toLowerCase()===target);\nif(!hit&&target)hit=skills.find(s=>(s.name||'').toLowerCase().includes(target));\nif(!hit)for(const f of fallbacks){hit=skills.find(s=>(s.name||'').toLowerCase()===f)||skills.find(s=>(s.name||'').toLowerCase().includes(f));if(hit)break;}\nif(!hit||!hit.id){\n  const available=skills.map(s=>s.name).filter(Boolean);\n  throw new Error('Skill not resolved for client '+(cfg.client_name||'(unknown)')+'. Wanted: \"'+(cfg.skill_name||'(none)')+'\". Manus project: '+(cfg.manus_project_id||'(none)')+'. skill.list returned '+available.length+' skill(s): '+(available.length?available.join(', '):'(empty)')+'. Refusing to submit without an explicit skill.');\n}\nreturn{json:{...ctx,resolved_skill_id:hit.id,resolved_skill_name:hit.name||'',skill_resolve_error:''}};"
+      },
+      "id": "47ed2896-9eb0-4d4c-bf92-d4f08ae6581f",
+      "name": "6c. Pick Skill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.manus.ai/v2/task.create",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"content\": [{ \"type\": \"text\", \"text\": {{ JSON.stringify($json.manus_message) }} }],\n    \"force_skills\": [{{ JSON.stringify($json.resolved_skill_id) }}]\n  },\n  \"title\": {{ JSON.stringify(($json.topic || \"Ebook LinkedIn Posts\") + \" - \" + $json.record_id) }},\n  \"project_id\": {{ JSON.stringify($json.cfg.manus_project_id) }},\n  \"hide_in_task_list\": false,\n  \"agent_profile\": \"manus-1.6\"\n}",
+        "options": {}
+      },
+      "id": "852ce88d-680d-428f-83b9-97b9acade226",
+      "name": "7. Submit to Manus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3520,
+        -80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$input.item.json;\nconst ctx=$('6c. Pick Skill').item.json;\nconst taskId=r.task_id||r.id||(r.data&&(r.data.task_id||r.data.id))||'';\nreturn{json:{...ctx,manus_task_id:taskId,manus_task_url:r.task_url||'',manus_has_task:!!taskId,manus_error:taskId?'':JSON.stringify(r).substring(0,200)}};"
+      },
+      "id": "fe2c1e6f-50af-457f-881f-c9b4c66269d0",
+      "name": "8. Extract Task ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3744,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblivYcQy8Gj4D9gG"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Notes": "={{ ($json.notes_base ? $json.notes_base + '\\n\\n' : '') + $json.sep + '\\n' + $json.stage_tag + '\\n' + 'Updated: ' + $now.setZone($json.cfg.timezone || 'Asia/Manila').toFormat('yyyy-MM-dd HH:mm') + '\\nSource eBook file: '+$json.ebook_file_url+'\\nPosts folder: '+$json.drive_folder_url+'\\nManus Task ID: '+$json.manus_task_id+'\\nManus Task URL: '+$json.manus_task_url }}",
+            "Posts_Folder_URL": "={{ $json.drive_folder_url }}",
+            "Status": "LinkedIn Posts Ready",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "39e91ba9-9f6c-4443-9e8e-d089ac646d9e",
+      "name": "9. Mark Ebook Ready",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3968,
+        80
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "c005372d-d399-4d0d-8f58-103dce4d1a21",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -736,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item.json;\nconst recordId=d.record_id||'';\nconst nameSlug=(d.source_name||'ebook-posts').toLowerCase().replace(/[^\\w\\s-]/g,'').replace(/\\s+/g,'-').replace(/-+/g,'-').substring(0,50).replace(/^-|-$/g,'');\nconst subfolderName=`${recordId}_${nameSlug}_linkedin-posts`;\nreturn{json:{...d,subfolder_name:subfolderName}};"
+      },
+      "id": "e0e668a0-e8fc-4d8a-a566-ac357ac22697",
+      "name": "4c. Prepare Subfolder Name",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": {{ JSON.stringify($json.subfolder_name) }},\n  \"mimeType\": \"application/vnd.google-apps.folder\",\n  \"parents\": [{{ JSON.stringify($json.cfg.drive_folder_id) }}]\n}",
+        "options": {}
+      },
+      "id": "aed03f61-3b54-4cbc-9ada-caf233c02552",
+      "name": "4d. Create Drive Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1728,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const folderResp=$input.item.json;\nconst prev=$('4c. Prepare Subfolder Name').item.json;\nconst subFolderId=folderResp.id||'';\nconst driveFolderUrl=subFolderId?`https://drive.google.com/drive/folders/${subFolderId}`:'';\nreturn{json:{...prev,sub_folder_id:subFolderId,drive_folder_url:driveFolderUrl,folder_error:subFolderId?'':'Folder creation failed: '+JSON.stringify(folderResp)}};"
+      },
+      "id": "a4ae7976-eb14-4a2f-9ff1-fc8d89572bed",
+      "name": "4e. Extract Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "f1",
+              "leftValue": "={{ $json.has_file }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          }
+        },
+        "options": {}
+      },
+      "id": "d8218d7c-6628-477b-a2ab-dcf36909d642",
+      "name": "5. Has File?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2176,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.static_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblivYcQy8Gj4D9gG"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Notes": "LinkedIn posts run skipped: Ebook_Source_File_URL is empty or not a usable http(s) link. Fix it and set Status back to Ready for LinkedIn Posts.",
+            "Status": "Error - Missing Source",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "f3769288-d9b9-4b28-9870-6bd1b826379d",
+      "name": "Err. No File",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        112
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const src=$('4e. Extract Folder ID').item.json;\nreturn{json:{...src}};"
+      },
+      "id": "02596f29-1a6d-4166-9b01-847319d7c335",
+      "name": "4f. Restore After Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Static_Enabled})",
+        "options": {}
+      },
+      "id": "eec017e9-9a32-4ded-a7b2-a9b06eb4aa7b",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -512,
+        80
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "AND({Output_Type}='ebook-linkedin', {Enabled})",
+        "options": {}
+      },
+      "id": "e8e047f9-8972-424b-b15a-d1d12d789bd9",
+      "name": "0b. Load Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -288,
+        80
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'ebook-linkedin';\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outputs = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Static_Enabled'] !== true) continue;\n  const row = outputs.find(o => o['Key'] === name + '::' + OUTPUT_TYPE);\n  if (!row) continue;\n  if (row['Enabled'] !== true) continue;\n  if (!c['Static_Base_ID'] || !row['Drive_Folder_ID'] || !row['Manus_Project_ID'] || !row['Skill_Name']) continue;\n  out.push({ json: {\n    client_name: name,\n    static_base_id: c['Static_Base_ID'],\n    brand_name: c['Brand_Name'] || name,\n    timezone: c['Timezone'] || 'Asia/Manila',\n    drive_folder_id: row['Drive_Folder_ID'],\n    manus_project_id: row['Manus_Project_ID'],\n    skill_name: row['Skill_Name'],\n    skill_fallback: row['Skill_Fallback'] || ''\n  }});\n}\nreturn out;"
+      },
+      "id": "c27fdfe9-7437-4f59-9a07-66a5ca3a1a55",
+      "name": "0c. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "7e4c9f41-5c52-4530-8623-9eea0f49cc92",
+      "name": "0d. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        160,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d60cd8d8-89d8-409f-9232-eacb67df2308",
+      "name": "1a. Has Records?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        608,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0d. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.static_base_id) { throw new Error('Could not resolve client config for this iteration. Refusing to run with the wrong client.'); }\nreturn { json: { ...$input.item.json, __cfg: cfg } };"
+      },
+      "id": "24b2360f-898a-4255-9712-1224ffa928ad",
+      "name": "1b. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        16
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "3. Extract Record": {
+      "main": [
+        [
+          {
+            "node": "4b. Restore Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Mark Processing": {
+      "main": [
+        [
+          {
+            "node": "4f. Restore After Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Restore Context": {
+      "main": [
+        [
+          {
+            "node": "4c. Prepare Subfolder Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Build Manus Message": {
+      "main": [
+        [
+          {
+            "node": "6b. Resolve Skill ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Resolve Skill ID": {
+      "main": [
+        [
+          {
+            "node": "6c. Pick Skill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Pick Skill": {
+      "main": [
+        [
+          {
+            "node": "7. Submit to Manus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Submit to Manus": {
+      "main": [
+        [
+          {
+            "node": "8. Extract Task ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Extract Task ID": {
+      "main": [
+        [
+          {
+            "node": "9. Mark Ebook Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Prepare Subfolder Name": {
+      "main": [
+        [
+          {
+            "node": "4d. Create Drive Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Create Drive Subfolder": {
+      "main": [
+        [
+          {
+            "node": "4e. Extract Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4e. Extract Folder ID": {
+      "main": [
+        [
+          {
+            "node": "5. Has File?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Has File?": {
+      "main": [
+        [
+          {
+            "node": "4. Mark Processing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err. No File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4f. Restore After Processing": {
+      "main": [
+        [
+          {
+            "node": "6. Build Manus Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Load Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Load Outputs": {
+      "main": [
+        [
+          {
+            "node": "0c. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0d. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Ready Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready Records": {
+      "main": [
+        [
+          {
+            "node": "1a. Has Records?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1a. Has Records?": {
+      "main": [
+        [
+          {
+            "node": "1b. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "3. Extract Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Mark Ebook Ready": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err. No File": {
+      "main": [
+        [
+          {
+            "node": "0d. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "b359631c-a3c6-4bee-bf32-de9c15bd184d",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "0i9cE806ypURVJPb",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

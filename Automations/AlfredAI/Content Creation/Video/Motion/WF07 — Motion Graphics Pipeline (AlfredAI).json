@@ -1,0 +1,695 @@
+{
+  "name": "WF07 — Motion Graphics Pipeline (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "d2636d3a-b85c-4e47-b10d-8c34774233f6",
+      "name": "Every 2 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -752,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "filterByFormula": "AND({Status} = 'Ready for Motion Graphics', NOT({AI_Video_URL} = ''))",
+        "options": {}
+      },
+      "id": "36372a9d-b8e6-4355-8633-6178751d7511",
+      "name": "Get Ready for Motion Graphics",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        32
+      ],
+      "alwaysOutputData": false,
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\n// Airtable node v2.2 returns fields FLAT on the item; older shapes nest them\n// under .fields. Accept either, so a node version bump cannot silently empty\n// every field and push the record into Error - Motion Graphics Failed.\nconst f = (item.fields && typeof item.fields === 'object') ? item.fields : item;\nconst topic = f['Topic'] || '';\nconst topicSlug = topic.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');\nconst category = (f['Category'] || '').toString().trim();\nreturn {\n  json: {\n    record_id: item.id || '',\n    topic: topic,\n    topic_slug: topicSlug,\n    category: category,\n    video_url: f['AI_Video_URL'] || ''\n  }\n};"
+      },
+      "id": "f30f5d2a-a41e-4ac9-b65e-a140c7522326",
+      "name": "Extract Record Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "Motion Graphics Processing"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "72673ec5-fad2-4beb-a081-987ee4002f0e",
+      "name": "Set Status Processing",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        144,
+        -192
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://72.62.75.118:8080/render",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ record_id: $('Extract Record Data').first().json.record_id, topic: $('Extract Record Data').first().json.topic, topic_slug: $('Extract Record Data').first().json.topic_slug, category: $('Extract Record Data').first().json.category, video_url: $('Extract Record Data').first().json.video_url, timezone: 'Asia/Manila', base_id: 'appgBzSHGSK2v8B6g', table_id: 'tblSBKG2Zx2nZUPIT' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 2400000
+        }
+      },
+      "id": "ac87c0d7-cf03-46cc-949b-02c59a0e5c58",
+      "name": "Call Render Server",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        368,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $input.item.json;\nconst prev = $('Extract Record Data').first().json;\nreturn {\n  json: {\n    record_id: prev.record_id,\n    success: r.success === true,\n    output_url: r.outputUrl || '',\n    transcript_url: r.transcriptUrl || '',\n    error: r.error || 'Unknown error'\n  }\n};"
+      },
+      "id": "1afd419e-3c12-457d-aa37-0ddbf45d0ed9",
+      "name": "Parse Render Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.success }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": true,
+              "id": "a6974601-8263-4cf1-adea-09660d8595f1"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "14c44d49-25dc-44f3-8476-8db322fd57ef",
+      "name": "Render Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        816,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "Motion Graphics Done",
+            "Processed_Video_URL": "={{ $json.output_url }}",
+            "Transcript_URL": "={{ $json.transcript_url }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "477a6365-0036-415a-b1e0-652bf425237a",
+      "name": "Write Success to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        -112
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "9db36707-afc5-4788-8533-9af16bf88ea9",
+      "name": "Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -304,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "Error - Motion Graphics Failed",
+            "Reel_Notes": "={{ 'Motion graphics failed: ' + $json.error }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "35195b9d-f22a-48a7-9718-7f165b9e0eaf",
+      "name": "Write Error to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        80
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "dc35bc90-c330-455c-9c50-84bdc676b838",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved-check",
+              "leftValue": "={{ $json.Production_Approval === true && (($json.Script_Approval && typeof $json.Script_Approval === 'object') ? $json.Script_Approval.name : $json.Script_Approval) === 'Approved' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "2e6800be-aa6e-4ea9-bd69-7620dbe9ee7f",
+      "name": "MGp. Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -80,
+        -416
+      ],
+      "notes": "T-44: Production_Approval ticked AND Script_Approval = Approved, or nothing runs."
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "8aeeb216-066a-40a9-a00e-efe802deb8ad",
+      "name": "MGq. Re-read Notes (Not Approved)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        144,
+        -416
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// T-44: record is not approved. Rewrite only this workflow's notes block.\nconst fresh = $input.item.json || {};\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst sep = '==============================';\nconst TAG = 'MOTION GRAPHICS (WF07)';\nconst notes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst base = notes.replace(re, '').trim();\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + TAG + '\\nUpdated: ' + stamp + '\\nStage: Skipped' + '\\nNot approved: skipped';\nreturn { json: { record_id: fresh.id || '', reel_notes_final: (base ? base + '\\n\\n' : '') + block } };"
+      },
+      "id": "94703201-4310-4557-8b51-6b51ebb9db9d",
+      "name": "MGr. Build Skip Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        -416
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Status": "B-Roll Ready",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "9969ff9c-aa85-4b7a-8cfb-d01db491d944",
+      "name": "MGs. Revert Not Approved",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        592,
+        -416
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 2 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Ready for Motion Graphics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Ready for Motion Graphics": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Record Data": {
+      "main": [
+        [
+          {
+            "node": "Set Status Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Status Processing": {
+      "main": [
+        [
+          {
+            "node": "Call Render Server",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Render Server": {
+      "main": [
+        [
+          {
+            "node": "Parse Render Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Render Response": {
+      "main": [
+        [
+          {
+            "node": "Render Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Write Success to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write Error to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Success to Airtable": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Error to Airtable": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Ready for Motion Graphics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch of 1": {
+      "main": [
+        null,
+        [
+          {
+            "node": "MGp. Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MGp. Approved?": {
+      "main": [
+        [
+          {
+            "node": "Extract Record Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MGq. Re-read Notes (Not Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MGq. Re-read Notes (Not Approved)": {
+      "main": [
+        [
+          {
+            "node": "MGr. Build Skip Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MGr. Build Skip Notes": {
+      "main": [
+        [
+          {
+            "node": "MGs. Revert Not Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MGs. Revert Not Approved": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "58035c25-3d83-4900-a9fc-e3c0336ed799",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "LD476kDUY5rBLOex",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-02-12T01:13:37.643Z",
+      "createdAt": "2026-02-12T01:13:37.643Z",
+      "id": "L8r5R8kEQXaUFlQO",
+      "name": "AlfredAI Content"
+    }
+  ]
+}

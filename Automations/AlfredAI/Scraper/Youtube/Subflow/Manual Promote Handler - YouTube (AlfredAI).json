@@ -1,0 +1,2191 @@
+{
+  "name": "Manual Promote Handler - YouTube (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "b397f84c-2547-4ba1-894c-7013326f7be4",
+      "name": "Every 1 Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        384
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ecd31aaf-17fe-4b44-8892-96c216041fc4",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        272,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblWBISPAy99YtoPw",
+          "mode": "id"
+        },
+        "filterByFormula": "AND({Status} = 'Manual Promote', {Platform} = 'YouTube', NOT({Manually_Processed}), NOT({Title} = ''))",
+        "options": {}
+      },
+      "id": "66886090-2df8-4f29-adf3-08023736ad9a",
+      "name": "1. Get Manually Promoted Videos",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        496,
+        288
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a83af48e-3d61-46bf-804e-f96f0b713516",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "022e4b38-885b-4c0f-9f53-98f3c9423163",
+      "name": "2. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "17b7bd84-c8f8-4575-aa59-a7f12c83fb1d",
+      "name": "3. Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        944,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "7d791065-f823-4f02-84f8-c0ee317c93b2",
+      "name": "4. Wait 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        192
+      ],
+      "webhookId": "0cff2b5b-10a1-4c91-a47f-055ff49d7e15"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Topic": "={{ $json.Title }}",
+            "Status": "Idea",
+            "Platform": "={{ $json.Platform }}",
+            "Content Type": "={{ $json['Content Type'] }}",
+            "Publish_Date": "={{ $now.plus({days: 3}).toFormat('yyyy-MM-dd') }}",
+            "Date Added": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "Category": "={{ (() => {\n  const t = ($json['Title'] || '').toLowerCase();\n  const edu = ['how to','full course','beginner','masterclass','tutorial','guide','explained',\n    'learn ','lessons','levels of',' tips','skills','stop using',\"here's the fix\",'step by step',\n    'complete guide','from scratch','for beginners','crash course','deep dive','walkthrough',\n    'how i use','how i build','setup'];\n  for (const kw of edu) { if (t.includes(kw)) return 'Education'; }\n  const prod = ['product intro','product demo','product launch','product review','unboxing','hands on','first look'];\n  for (const kw of prod) { if (t.includes(kw)) return 'Product'; }\n  return 'News';\n})() }}",
+            "Reel_Notes": "={{ 'Manually promoted on ' + $now.toFormat('yyyy-MM-dd') }}",
+            "Source Name": "={{ $('3. Batch of 1').item.json['Source Name'] }}",
+            "Source URL": "={{ $('3. Batch of 1').item.json.URL }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "f3eee32e-77a4-4806-92d6-29435d5bfa01",
+      "name": "5. Create Reel Engine Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        192
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "7d98086d-0dd3-49ab-a3eb-1440d979146d",
+      "name": "5b. Wait 3s Before Viral Check",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        192
+      ],
+      "webhookId": "641cd6a9-c2f4-45f4-b66f-13ee35b4e534"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl12IsF6vUdPY60r",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ '{URL} = \\'' + $('3. Batch of 1').item.json.URL + '\\'' }}",
+        "options": {
+          "fields": [
+            "Reel Engine",
+            "Source"
+          ]
+        }
+      },
+      "id": "f2016bbd-f100-4477-871b-0522415f5dc0",
+      "name": "6. Check Viral Library Duplicate",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        192
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cd331f44-c5c5-4571-bd94-dbbe0a44fe1e",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "19d6dae4-1497-41b2-b83d-df69d1a4446b",
+      "name": "7. Is New to Viral Library?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2288,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl12IsF6vUdPY60r",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "URL": "={{ $('3. Batch of 1').item.json.URL }}",
+            "Platform": "={{ $('3. Batch of 1').item.json.Platform }}",
+            "Creator_Handle": "={{ $('3. Batch of 1').item.json['Creator_Handle'] || $('3. Batch of 1').item.json['Source Name'] }}",
+            "Processed": false
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "18f80de6-1d50-41fe-ba2e-5a178853261a",
+      "name": "8. Create Viral Library Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        96
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "ee4991aa-ae42-481f-a543-fc0c13bc06c7",
+      "name": "9. All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        944,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('5. Create Reel Engine Record').item.json.id }}",
+            "Associated_Sources": "={{ ($('3. Batch of 1').item.json.Associated_Sources && $('3. Batch of 1').item.json.Associated_Sources.length) ? $('3. Batch of 1').item.json.Associated_Sources : [] }}",
+            "Priority_Score": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Ready for Script",
+                  "value": "Ready for Script"
+                },
+                {
+                  "name": "Ready to Fact Check",
+                  "value": "Ready to Fact Check"
+                },
+                {
+                  "name": "Ready for B-Roll Idea",
+                  "value": "Ready for B-Roll Idea"
+                },
+                {
+                  "name": "Ready for Video Generation",
+                  "value": "Ready for Video Generation"
+                },
+                {
+                  "name": "Ready for B-roll Generation",
+                  "value": "Ready for B-roll Generation"
+                },
+                {
+                  "name": "Ready for Compositing",
+                  "value": "Ready for Compositing"
+                },
+                {
+                  "name": "Ready for Motion Graphics",
+                  "value": "Ready for Motion Graphics"
+                },
+                {
+                  "name": "Ready for Publishing",
+                  "value": "Ready for Publishing"
+                },
+                {
+                  "name": "Ready for Image Generation",
+                  "value": "Ready for Image Generation"
+                },
+                {
+                  "name": "Ready for Blog Post",
+                  "value": "Ready for Blog Post"
+                },
+                {
+                  "name": "Ready for Ebook",
+                  "value": "Ready for Ebook"
+                },
+                {
+                  "name": "Video Processing",
+                  "value": "Video Processing"
+                },
+                {
+                  "name": "B-Roll Processing",
+                  "value": "B-Roll Processing"
+                },
+                {
+                  "name": "Composition Processing",
+                  "value": "Composition Processing"
+                },
+                {
+                  "name": "Motion Graphics Processing",
+                  "value": "Motion Graphics Processing"
+                },
+                {
+                  "name": "Image Processing",
+                  "value": "Image Processing"
+                },
+                {
+                  "name": "Blog Processing",
+                  "value": "Blog Processing"
+                },
+                {
+                  "name": "Ebook Processing",
+                  "value": "Ebook Processing"
+                },
+                {
+                  "name": "Ebook Ready",
+                  "value": "Ebook Ready"
+                },
+                {
+                  "name": "Blog Ready",
+                  "value": "Blog Ready"
+                },
+                {
+                  "name": "Video Ready",
+                  "value": "Video Ready"
+                },
+                {
+                  "name": "B-Roll Ready",
+                  "value": "B-Roll Ready"
+                },
+                {
+                  "name": "Motion Graphics Done",
+                  "value": "Motion Graphics Done"
+                },
+                {
+                  "name": "Image Ready",
+                  "value": "Image Ready"
+                },
+                {
+                  "name": "Ebook Ready",
+                  "value": "Ebook Ready"
+                },
+                {
+                  "name": "Blog Posted",
+                  "value": "Blog Posted"
+                },
+                {
+                  "name": "Script Done",
+                  "value": "Script Done"
+                },
+                {
+                  "name": "B-Roll Idea Done",
+                  "value": "B-Roll Idea Done"
+                },
+                {
+                  "name": "Verified",
+                  "value": "Verified"
+                },
+                {
+                  "name": "Idea",
+                  "value": "Idea"
+                },
+                {
+                  "name": "Draft",
+                  "value": "Draft"
+                },
+                {
+                  "name": "Needs Review",
+                  "value": "Needs Review"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "Rejected"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Published",
+                  "value": "Published"
+                },
+                {
+                  "name": "Error - No Script",
+                  "value": "Error - No Script"
+                },
+                {
+                  "name": "Error - Insufficient Credits",
+                  "value": "Error - Insufficient Credits"
+                },
+                {
+                  "name": "Error - Fal.ai No Credit",
+                  "value": "Error - Fal.ai No Credit"
+                },
+                {
+                  "name": "Error - Need Ratio",
+                  "value": "Error - Need Ratio"
+                },
+                {
+                  "name": "Error - B-Roll Issue",
+                  "value": "Error - B-Roll Issue"
+                },
+                {
+                  "name": "Error - Motion Graphics Failed",
+                  "value": "Error - Motion Graphics Failed"
+                },
+                {
+                  "name": "Error - Compositing Failed",
+                  "value": "Error - Compositing Failed"
+                },
+                {
+                  "name": "Error - Image Generation Failed",
+                  "value": "Error - Image Generation Failed"
+                },
+                {
+                  "name": "Error - Blog Generation Failed",
+                  "value": "Error - Blog Generation Failed"
+                },
+                {
+                  "name": "Error - Blog API Failed",
+                  "value": "Error - Blog API Failed"
+                },
+                {
+                  "name": "Error - Ebook Generation Failed",
+                  "value": "Error - Ebook Generation Failed"
+                },
+                {
+                  "name": "Error - No Script",
+                  "value": "Error - No Script"
+                },
+                {
+                  "name": "Error - No Topic",
+                  "value": "Error - No Topic"
+                },
+                {
+                  "name": "Error - Missing Required Fields",
+                  "value": "Error - Missing Required Fields"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Ratio",
+              "displayName": "Ratio",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Landscape",
+                  "value": "Landscape"
+                },
+                {
+                  "name": "Portrait",
+                  "value": "Portrait"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source Name",
+              "displayName": "Source Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Script",
+              "displayName": "Script",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI_Video_URL",
+              "displayName": "AI_Video_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "BGM_File_URL",
+              "displayName": "BGM_File_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "BGM_Track_2_URL",
+              "displayName": "BGM_Track_2_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Sound_Effects_URL",
+              "displayName": "Sound_Effects_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "BRoll_URL",
+              "displayName": "BRoll_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Asset_Folder_URL",
+              "displayName": "Asset_Folder_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Processed_Video_URL",
+              "displayName": "Processed_Video_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Composited_Video_URL",
+              "displayName": "Composited_Video_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Transcript_URL",
+              "displayName": "Transcript_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Final_Video_URL",
+              "displayName": "Final_Video_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Production_Brief",
+              "displayName": "Production_Brief",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Fact_Check_Status",
+              "displayName": "Fact_Check_Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Pending",
+                  "value": "Pending"
+                },
+                {
+                  "name": "In Review",
+                  "value": "In Review"
+                },
+                {
+                  "name": "Verified",
+                  "value": "Verified"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Needs Review",
+                  "value": "Needs Review"
+                },
+                {
+                  "name": "Passed",
+                  "value": "Passed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Viral_Pattern_Used",
+              "displayName": "Viral_Pattern_Used",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Associated_Sources",
+              "displayName": "Associated_Sources",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Publish_Date",
+              "displayName": "Publish_Date",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Reel_Notes",
+              "displayName": "Reel_Notes",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Motion_Graphics_Error",
+              "displayName": "Motion_Graphics_Error",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Compositing_Error",
+              "displayName": "Compositing_Error",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Screenshots_Needed",
+              "displayName": "Screenshots_Needed",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Sound_Effects",
+              "displayName": "Sound_Effects",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Music_BGM",
+              "displayName": "Music_BGM",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "HeyGen_Video_ID",
+              "displayName": "HeyGen_Video_ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Created",
+              "displayName": "Created",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Last Modified",
+              "displayName": "Last Modified",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "News",
+                  "value": "News"
+                },
+                {
+                  "name": "Education",
+                  "value": "Education"
+                },
+                {
+                  "name": "Product",
+                  "value": "Product"
+                },
+                {
+                  "name": "Tech",
+                  "value": "Tech"
+                },
+                {
+                  "name": "Business",
+                  "value": "Business"
+                },
+                {
+                  "name": "Entertainment",
+                  "value": "Entertainment"
+                },
+                {
+                  "name": "Health",
+                  "value": "Health"
+                },
+                {
+                  "name": "Lifestyle",
+                  "value": "Lifestyle"
+                },
+                {
+                  "name": "Other",
+                  "value": "Other"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Output_Format",
+              "displayName": "Output_Format",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Video",
+                  "value": "Video"
+                },
+                {
+                  "name": "Image",
+                  "value": "Image"
+                },
+                {
+                  "name": "Carousel",
+                  "value": "Carousel"
+                },
+                {
+                  "name": "Blog",
+                  "value": "Blog"
+                },
+                {
+                  "name": "Ebook",
+                  "value": "Ebook"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Render_Style",
+              "displayName": "Render_Style",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "photorealistic-cinematic",
+                  "value": "photorealistic-cinematic"
+                },
+                {
+                  "name": "isometric-3d-illustration",
+                  "value": "isometric-3d-illustration"
+                },
+                {
+                  "name": "flat-2d-vector",
+                  "value": "flat-2d-vector"
+                },
+                {
+                  "name": "low-poly-3d",
+                  "value": "low-poly-3d"
+                },
+                {
+                  "name": "cinematic-cgi",
+                  "value": "cinematic-cgi"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Infographic_Style",
+              "displayName": "Infographic_Style",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "connector-dot-line",
+                  "value": "connector-dot-line"
+                },
+                {
+                  "name": "geometric-panels",
+                  "value": "geometric-panels"
+                },
+                {
+                  "name": "numbered-badges",
+                  "value": "numbered-badges"
+                },
+                {
+                  "name": "annotation-callouts",
+                  "value": "annotation-callouts"
+                },
+                {
+                  "name": "minimal-caption",
+                  "value": "minimal-caption"
+                },
+                {
+                  "name": "magazine-editorial",
+                  "value": "magazine-editorial"
+                },
+                {
+                  "name": "data-viz-overlay",
+                  "value": "data-viz-overlay"
+                },
+                {
+                  "name": "sticker-collage",
+                  "value": "sticker-collage"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "YouTube",
+                  "value": "YouTube"
+                },
+                {
+                  "name": "Instagram",
+                  "value": "Instagram"
+                },
+                {
+                  "name": "TikTok",
+                  "value": "TikTok"
+                },
+                {
+                  "name": "LinkedIn",
+                  "value": "LinkedIn"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Content Type",
+              "displayName": "Content Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Short",
+                  "value": "Short"
+                },
+                {
+                  "name": "Video",
+                  "value": "Video"
+                },
+                {
+                  "name": "Reel",
+                  "value": "Reel"
+                },
+                {
+                  "name": "TikTok",
+                  "value": "TikTok"
+                },
+                {
+                  "name": "Post",
+                  "value": "Post"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Static_Asset_URL",
+              "displayName": "Static_Asset_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Carousel_Slide_URLs",
+              "displayName": "Carousel_Slide_URLs",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Ebook_PDF_URL",
+              "displayName": "Ebook_PDF_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source URL",
+              "displayName": "Source URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Script_Summary",
+              "displayName": "Script_Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI_Script_Improvements",
+              "displayName": "AI_Script_Improvements",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Fact_Check_Notes",
+              "displayName": "Fact_Check_Notes",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Tags",
+              "displayName": "Tags",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "options": [
+                {
+                  "name": "Tutorial",
+                  "value": "Tutorial"
+                },
+                {
+                  "name": "Review",
+                  "value": "Review"
+                },
+                {
+                  "name": "Commentary",
+                  "value": "Commentary"
+                },
+                {
+                  "name": "Interview",
+                  "value": "Interview"
+                },
+                {
+                  "name": "News",
+                  "value": "News"
+                },
+                {
+                  "name": "Comedy",
+                  "value": "Comedy"
+                },
+                {
+                  "name": "Motivation",
+                  "value": "Motivation"
+                },
+                {
+                  "name": "Other",
+                  "value": "Other"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Date Added",
+              "displayName": "Date Added",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status (Temp)",
+              "displayName": "Status (Temp)",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Idea",
+                  "value": "Idea"
+                },
+                {
+                  "name": "Ready for Script",
+                  "value": "Ready for Script"
+                },
+                {
+                  "name": "Script Done",
+                  "value": "Script Done"
+                },
+                {
+                  "name": "Verified",
+                  "value": "Verified"
+                },
+                {
+                  "name": "Video Ready",
+                  "value": "Video Ready"
+                },
+                {
+                  "name": "Video Processing",
+                  "value": "Video Processing"
+                },
+                {
+                  "name": "Published",
+                  "value": "Published"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Needs Review",
+                  "value": "Needs Review"
+                },
+                {
+                  "name": "Error - No Script",
+                  "value": "Error - No Script"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Screenshot_Sources",
+              "displayName": "Screenshot_Sources",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "BRoll_Generated",
+              "displayName": "BRoll_Generated",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "BRoll_Reference",
+              "displayName": "BRoll_Reference",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Hook_Video_Brief",
+              "displayName": "Hook_Video_Brief",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Cutting_Technique",
+              "displayName": "Cutting_Technique",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Soundbite",
+              "displayName": "Soundbite",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Priority_Score",
+              "displayName": "Priority_Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Caption",
+              "displayName": "Instagram_Caption",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn_Caption",
+              "displayName": "LinkedIn_Caption",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "YouTube_Published",
+              "displayName": "YouTube_Published",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Instagram_Published",
+              "displayName": "Instagram_Published",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "TikTok_Published",
+              "displayName": "TikTok_Published",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn_Published",
+              "displayName": "LinkedIn_Published",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "YouTube_URL",
+              "displayName": "YouTube_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Instagram_URL",
+              "displayName": "Instagram_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn_URL",
+              "displayName": "LinkedIn_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "TikTok_URL",
+              "displayName": "TikTok_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Blog_Content",
+              "displayName": "Blog_Content",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "AlfredAI",
+                  "value": "AlfredAI"
+                },
+                {
+                  "name": "Palantir",
+                  "value": "Palantir"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Final_Draft_URL",
+              "displayName": "Final_Draft_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Drive_Asset_URL",
+              "displayName": "Drive_Asset_URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e29181fe-b4b9-41a5-b235-a8b440fa0f31",
+      "name": "5b. Link Source to Reel Engine",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        192
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "68f72758-e4ec-48dc-a93c-d903c6506e11",
+      "name": "8a. Wait 2s VL Links",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        2736,
+        96
+      ],
+      "webhookId": "8bb26fd1-7e96-4ad7-9d66-9fe27daf19e4"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl12IsF6vUdPY60r",
+          "mode": "id"
+        },
+        "columns": {
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "value": {
+            "id": "={{ $('8. Create Viral Library Record').item.json.id }}",
+            "Source": "={{ ($('3. Batch of 1').item.json.Associated_Sources && $('3. Batch of 1').item.json.Associated_Sources.length) ? $('3. Batch of 1').item.json.Associated_Sources : [] }}",
+            "Reel Engine": "={{ [$('5. Create Reel Engine Record').item.json.id] }}"
+          },
+          "mappingMode": "defineBelow"
+        },
+        "options": {}
+      },
+      "id": "24db3714-4a28-47b6-b036-e8ba8c2fe0c0",
+      "name": "8b. Link Source + Reel Engine to VL",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        96
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "name": "8c. Wait 2s VPU",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        3184,
+        96
+      ],
+      "id": "a6329a42-5461-4c81-8c2f-d8482d9cfa43",
+      "webhookId": "wait-8c-manual-001"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "id": "={{ $('5. Create Reel Engine Record').item.json.id }}",
+            "fld39p61u0NcaRutp": "={{ [$('8. Create Viral Library Record').item.json.id] }}"
+          },
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "8d. Link Viral Pattern to Reel Engine",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3408,
+        96
+      ],
+      "id": "a135ac82-55a0-4043-a3e4-f45ab3714eb7",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "8e. Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3856,
+        192
+      ],
+      "id": "bb498e67-4080-45b7-bf88-c04a7a97bba2"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "id": "={{ $('3. Batch of 1').item.json.id }}",
+            "Manually_Processed": true
+          }
+        },
+        "options": {}
+      },
+      "id": "887d57a0-0001-44b9-9568-12c1229fe001",
+      "name": "Mark Processed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        192
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel Engine": "={{ (($('6. Check Viral Library Duplicate').item.json['Reel Engine'] || []).map(r => (typeof r === 'object' ? r.id : r))).concat([$('5. Create Reel Engine Record').item.json.id]) }}",
+            "Source": "={{ ($('3. Batch of 1').item.json.Associated_Sources && $('3. Batch of 1').item.json.Associated_Sources.length) ? $('3. Batch of 1').item.json.Associated_Sources : [] }}",
+            "id": "={{ $('6. Check Viral Library Duplicate').item.json.id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "edae2b5c-53f1-4769-b23c-9ec624440fb9",
+      "name": "7a. Append Reel Engine to Existing VL",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        288
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "87e20d2a-68f5-4227-aed4-b4a4875c7265",
+      "name": "7b. Wait 2s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        3184,
+        288
+      ],
+      "webhookId": "8092a165-55af-4583-b7ca-2380146cfec0"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "fld39p61u0NcaRutp": "={{ [$('6. Check Viral Library Duplicate').item.json.id] }}",
+            "id": "={{ $('5. Create Reel Engine Record').item.json.id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "17ae2028-5a40-427b-9493-d07a77f6a2d0",
+      "name": "7c. Link Existing VL to Reel Engine VPU",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3408,
+        288
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 1 Hour": {
+      "main": [
+        [
+          {
+            "node": "1. Get Manually Promoted Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. Get Manually Promoted Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Manually Promoted Videos": {
+      "main": [
+        [
+          {
+            "node": "2. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "3. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9. All Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Batch of 1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "4. Wait 3s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Wait 3s": {
+      "main": [
+        [
+          {
+            "node": "5. Create Reel Engine Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Wait 3s Before Viral Check": {
+      "main": [
+        [
+          {
+            "node": "6. Check Viral Library Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Check Viral Library Duplicate": {
+      "main": [
+        [
+          {
+            "node": "7. Is New to Viral Library?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Is New to Viral Library?": {
+      "main": [
+        [
+          {
+            "node": "8. Create Viral Library Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7a. Append Reel Engine to Existing VL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Create Viral Library Record": {
+      "main": [
+        [
+          {
+            "node": "8a. Wait 2s VL Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Link Source to Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "5b. Wait 3s Before Viral Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8a. Wait 2s VL Links": {
+      "main": [
+        [
+          {
+            "node": "8b. Link Source + Reel Engine to VL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8b. Link Source + Reel Engine to VL": {
+      "main": [
+        [
+          {
+            "node": "8c. Wait 2s VPU",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8c. Wait 2s VPU": {
+      "main": [
+        [
+          {
+            "node": "8d. Link Viral Pattern to Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8d. Link Viral Pattern to Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "Mark Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Processed": {
+      "main": [
+        [
+          {
+            "node": "8e. Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Create Reel Engine Record": {
+      "main": [
+        [
+          {
+            "node": "5b. Link Source to Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a. Append Reel Engine to Existing VL": {
+      "main": [
+        [
+          {
+            "node": "7b. Wait 2s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7b. Wait 2s": {
+      "main": [
+        [
+          {
+            "node": "7c. Link Existing VL to Reel Engine VPU",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7c. Link Existing VL to Reel Engine VPU": {
+      "main": [
+        [
+          {
+            "node": "Mark Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "946ab54a-f777-486f-a026-169898e4c396",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "ETP5zyKvgsE1QcJK",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}

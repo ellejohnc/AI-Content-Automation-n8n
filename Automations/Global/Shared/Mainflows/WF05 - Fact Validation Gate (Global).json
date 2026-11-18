@@ -1,0 +1,808 @@
+{
+  "name": "WF05 - Fact Validation Gate (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Fact-check triggers and model settings come from CONTROL config.\n// cfg.fact_check = { trigger_categories:[], number_pattern, verify_tag,\n//                    claim_model, claim_temperature, claim_max_tokens, claim_system_prompt,\n//                    verify_model, verify_max_tokens, verify_system_prompt }\nconst item = $input.item.json;\nconst cfg = item.cfg || {};\nconst f = cfg.fact_check || {};\n\nconst triggerCategories = f.trigger_categories || ['news', 'data', 'report'];\nconst verifyTag = (f.verify_tag !== undefined) ? f.verify_tag : '[VERIFY]';\nconst numberPattern = f.number_pattern || '\\\\d+%|\\\\$\\\\d|\\\\d+ (million|billion|thousand|percent)';\n\nconst category = (item['Category'] || '').toLowerCase();\nconst script = item['Script'] || '';\n\nconst isNews = triggerCategories.some(c => category.includes(String(c).toLowerCase()));\nlet hasNumbers = false;\ntry { hasNumbers = new RegExp(numberPattern, 'i').test(script); }\ncatch (e) { console.log('[2] Invalid number_pattern in config: ' + e.message); }\nconst hasVerifyTags = verifyTag ? script.includes(verifyTag) : false;\nconst needsFactCheck = isNews || hasNumbers || hasVerifyTags;\n\nreturn { json: {\n  cfg: cfg,\n  record_id: item.id || '',\n  topic: item['Topic'] || '',\n  category: item['Category'] || 'General',\n  script: script,\n  source_url: item['Source URL'] || '',\n  platform: item['Platform'] || 'YouTube',\n  content_type: item['Content Type'] || 'Video',\n  needs_fact_check: needsFactCheck,\n  claim_model: f.claim_model || 'gpt-4.1-mini',\n  claim_temperature: (f.claim_temperature !== undefined && f.claim_temperature !== null) ? f.claim_temperature : 0.1,\n  claim_max_tokens: f.claim_max_tokens || 1500,\n  claim_system_prompt: f.claim_system_prompt || 'You are a fact-checking assistant. Extract ALL factual claims from the script that need verification. Return a JSON object with: claims (array of {claim_text, claim_type, search_query}). If no claims, return {\"claims\": []}. Return ONLY valid JSON.',\n  verify_model: f.verify_model || 'sonar',\n  verify_max_tokens: f.verify_max_tokens || 2000,\n  verify_system_prompt: f.verify_system_prompt || \"You are a fact-checking assistant. For each claim, determine if it is VERIFIED, UNVERIFIED, or FALSE. Provide source URLs. Return JSON with: results (array of {claim_number, status, source_url, notes}), overall_status ('Verified'/'Failed'/'Partial'), source_links (comma-separated URLs). Return ONLY valid JSON.\"\n} };"
+      },
+      "name": "2. Extract & Evaluate Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        192
+      ],
+      "id": "966644fb-d2d8-4409-b704-e1c268786c58"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.needs_fact_check }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "3. Needs Fact Check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        240,
+        192
+      ],
+      "id": "b502dd08-adf4-4054-b30c-64d5c0d4e5be"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json.claim_model) }},\n  \"messages\": [\n    { \"role\": \"system\", \"content\": {{ JSON.stringify($json.claim_system_prompt) }} },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify(\"Extract factual claims from this script:\\n\\n\" + $json.script) }} }\n  ],\n  \"temperature\": {{ $json.claim_temperature }},\n  \"max_tokens\": {{ $json.claim_max_tokens }}\n}",
+        "options": {}
+      },
+      "name": "4. Extract Claims (ChatGPT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        464,
+        96
+      ],
+      "id": "e734eb0c-935b-43ae-8181-a11b41fa91cb",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "x9t1HtZVkPLKi1dp",
+          "name": "OpenAI Bearer Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\nconst sourceData = $('2. Extract & Evaluate Record').item.json;\n\n// A failed or unusable extraction is never 'no claims'. It is flagged and sent to review.\nconst fail = (reason) => ({ json: { ...sourceData, claims: [], all_verified: true, extraction_failed: true, verification_results: 'FACT CHECK DID NOT RUN - ' + reason + ' Manual review needed.', source_links: '' } });\n\nif (response.error || !response.choices || !response.choices[0] || !response.choices[0].message) {\n  const msg = typeof response.error === 'string' ? response.error : JSON.stringify(response.error || 'no choices returned');\n  return fail('Claim extraction call failed: ' + msg + '.');\n}\n\nlet claimsData = null;\ntry {\n  const content = response.choices[0].message.content;\n  const cleanContent = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  claimsData = JSON.parse(cleanContent);\n} catch (e) {\n  return fail('Claim extraction returned unparseable output.');\n}\n\nif (!claimsData || !Array.isArray(claimsData.claims)) {\n  return fail('Claim extraction returned no claims array.');\n}\n\nif (claimsData.claims.length === 0) {\n  return { json: { ...sourceData, claims: [], all_verified: true, extraction_failed: false, verification_results: 'No factual claims extracted from script - sent to review.', source_links: '' } };\n}\n\nconst claimsList = claimsData.claims.map((c, i) => `${i+1}. ${c.claim_text} [Search: ${c.search_query}]`).join('\\n');\n\nreturn { json: { ...sourceData, claims: claimsData.claims, claims_text: claimsList, all_verified: false, extraction_failed: false, verification_results: '', source_links: '' } };"
+      },
+      "name": "5. Parse Claims",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        96
+      ],
+      "id": "9186f88e-7ddd-42ad-878a-389e567071fa"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.all_verified }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "6. Has Claims to Verify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        912,
+        96
+      ],
+      "id": "dc9e268a-f680-404b-98da-bdabcac756a0"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED_PERPLEXITY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json.verify_model) }},\n  \"messages\": [\n    { \"role\": \"system\", \"content\": {{ JSON.stringify($json.verify_system_prompt) }} },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify(\"Verify these claims:\\n\\n\" + $json.claims_text) }} }\n  ],\n  \"max_tokens\": {{ $json.verify_max_tokens }}\n}",
+        "options": {}
+      },
+      "name": "7. Verify Claims (Perplexity)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1136,
+        0
+      ],
+      "id": "f0c46382-d40f-4ce9-94a8-7a674fbcff84",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\nconst sourceData = $('5. Parse Claims').item.json;\n\nlet verificationData = {};\ntry {\n  const content = response.choices[0].message.content;\n  const cleanContent = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  verificationData = JSON.parse(cleanContent);\n} catch (e) {\n  verificationData = { overall_status: 'Manual Review Needed', source_links: '', results: [] };\n}\n\nconst overallStatus = verificationData.overall_status || 'Manual Review Needed';\nconst sourceLinks = verificationData.source_links || '';\n\nlet summary = '';\nif (verificationData.results && verificationData.results.length > 0) {\n  summary = verificationData.results.map(r =>\n    `Claim ${r.claim_number}: ${r.status} - ${r.notes || ''} ${r.source_url ? '(' + r.source_url + ')' : ''}`\n  ).join('\\n');\n}\n\nlet airtableStatus = 'Verified'; // Status field value\nlet factCheckStatus = 'Passed'; // Fact_Check_Status field value\nif (overallStatus === 'Failed') { airtableStatus = 'Failed'; factCheckStatus = 'Failed'; }\nelse if (overallStatus === 'Partial' || overallStatus === 'Manual Review Needed') { airtableStatus = 'Needs Review'; factCheckStatus = 'In Review'; }\n\nreturn { json: {\n  cfg: sourceData.cfg || {},\n  record_id: sourceData.record_id,\n  fact_check_status: airtableStatus,\n  fact_check_status_field: factCheckStatus,\n  verification_summary: summary,\n  source_links: sourceLinks,\n  overall_status: overallStatus\n} };"
+      },
+      "name": "8. Parse Verification Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "efe707cf-6a72-4666-b642-77c6f9f3b413"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Fact_Check_Notes": "={{ $json.source_links ? 'Sources: ' + $json.source_links + '\\n\\nVerification: ' + $json.verification_summary : $json.verification_summary }}",
+            "Fact_Check_Status": "={{ $json.fact_check_status_field || 'In Review' }}",
+            "Status": "={{ $json.fact_check_status_field === 'Passed' ? 'Verified' : ($json.fact_check_status_field === 'Failed' ? 'Failed' : 'Needs Review') }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "9. Update Reel Engine (Fact Checked)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        96
+      ],
+      "id": "7f25d111-5c1d-4cb7-89ff-ca2b099ff709",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Fact_Check_Notes": "No fact-check required - auto-verified",
+            "Fact_Check_Status": "Passed",
+            "Status": "Verified",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "10. Skip Fact Check - Mark Verified",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        368
+      ],
+      "id": "72486ef5-b9f3-47c2-acf2-9dd838ca74d3",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Reached when no claims were verified: either extraction failed or it returned zero claims.\n// Neither case may resolve to Verified, so the review state is set explicitly.\nconst sourceData = $input.item.json;\nreturn { json: {\n  cfg: sourceData.cfg || {},\n  record_id: sourceData.record_id,\n  fact_check_status: 'Needs Review',\n  fact_check_status_field: 'In Review',\n  verification_summary: sourceData.verification_results || 'No factual claims extracted from script - sent to review.',\n  source_links: '',\n  overall_status: sourceData.extraction_failed ? 'Extraction Failed' : 'No Claims'\n} };"
+      },
+      "name": "11. Auto-Verified (No Claims)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        192
+      ],
+      "id": "99709de0-c64a-467b-9432-35a972028735"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "39ffa9bb-8d2c-400f-985f-69b1a18dda49",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1776,
+        560
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "9181d834-6841-4f78-8c53-de33fc84e903",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1776,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "65f31956-d031-4592-a560-0631f3a178d0",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Status} = 'Ready to Fact Check', NOT({Script} = ''), NOT({Topic} = ''))",
+        "options": {}
+      },
+      "id": "d559f8ef-3386-45ae-b8a7-3358b9c3f42c",
+      "name": "1. Get Ready to Fact Check Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        192
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "c52cfeb5-839c-40ff-bd67-6cd1c02011f9",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1552,
+        464
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Enabled}",
+        "options": {}
+      },
+      "id": "da258bad-d4b3-4b5b-b1ce-3bde89eaf843",
+      "name": "0a2. Load Client Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1328,
+        464
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Swappable config comes from CONTROL as JSON.\n// Clients.Config_JSON = client-wide defaults.\n// Client_Outputs.Config_JSON where Key = '{Client}::script' = per-output override (shallow merge, output wins).\nconst OUTPUT_TYPE = 'script';\n\nfunction parseJson(raw, label) {\n  if (!raw) return {};\n  try {\n    const v = JSON.parse(raw);\n    if (v && typeof v === 'object' && !Array.isArray(v)) return v;\n    console.log('[0b] Config_JSON on ' + label + ' is not an object, ignoring');\n    return {};\n  } catch (e) {\n    console.log('[0b] Invalid Config_JSON on ' + label + ': ' + e.message);\n    return {};\n  }\n}\n\nconst outputs = $input.all().map(i => i.json);\nconst clients = $('0a. Load Clients').all().map(i => i.json);\n\nconst outByKey = {};\nfor (const o of outputs) {\n  const key = (o['Key'] || '').trim().toLowerCase();\n  if (key) outByKey[key] = o;\n}\n\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) { console.log('[0b] ' + name + ' has no Video_Base_ID, skipping'); continue; }\n\n  const clientCfg = parseJson(c['Config_JSON'], name);\n  const o = outByKey[(name + '::' + OUTPUT_TYPE).toLowerCase()] || null;\n  const outputCfg = o ? parseJson(o['Config_JSON'], name + '::' + OUTPUT_TYPE) : {};\n  const merged = { ...clientCfg, ...outputCfg };\n\n  out.push({ json: {\n    ...merged,\n    client_name:     name,\n    video_base_id:   c['Video_Base_ID'],\n    brand_name:      c['Brand_Name'] || name,\n    notes_stage_tag: c['Notes_Stage_Tag'] || '',\n    output_type:     OUTPUT_TYPE\n  } });\n}\n\nconsole.log('[0b] Clients to process: ' + out.length);\nreturn out;"
+      },
+      "id": "d0a209e5-9b9c-4c38-9185-b9fca961807f",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "858f4863-845a-4395-b166-6710d1791419",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -880,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "3e60f908-92d6-40cf-aaaa-823d85aa56ff",
+      "name": "1c. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -432,
+        192
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "eeaadd91-6798-4ff7-953a-1cd9a8f72e6f",
+      "name": "12. Gate Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1808,
+        368
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a156f667-cbc6-4b0b-809c-0de7707b2016",
+      "name": "13. All Clients Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        464
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2. Extract & Evaluate Record": {
+      "main": [
+        [
+          {
+            "node": "3. Needs Fact Check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Needs Fact Check?": {
+      "main": [
+        [
+          {
+            "node": "4. Extract Claims (ChatGPT)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "10. Skip Fact Check - Mark Verified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Extract Claims (ChatGPT)": {
+      "main": [
+        [
+          {
+            "node": "5. Parse Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Parse Claims": {
+      "main": [
+        [
+          {
+            "node": "6. Has Claims to Verify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Has Claims to Verify?": {
+      "main": [
+        [
+          {
+            "node": "7. Verify Claims (Perplexity)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "11. Auto-Verified (No Claims)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Verify Claims (Perplexity)": {
+      "main": [
+        [
+          {
+            "node": "8. Parse Verification Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0a2. Load Client Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a2. Load Client Outputs": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "13. All Clients Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Ready to Fact Check Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready to Fact Check Records": {
+      "main": [
+        [
+          {
+            "node": "1c. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "2. Extract & Evaluate Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Parse Verification Results": {
+      "main": [
+        [
+          {
+            "node": "9. Update Reel Engine (Fact Checked)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Auto-Verified (No Claims)": {
+      "main": [
+        [
+          {
+            "node": "9. Update Reel Engine (Fact Checked)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Update Reel Engine (Fact Checked)": {
+      "main": [
+        [
+          {
+            "node": "12. Gate Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. Skip Fact Check - Mark Verified": {
+      "main": [
+        [
+          {
+            "node": "12. Gate Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. Gate Done": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "56e35df9-0d69-4e27-ad63-6dd9c15c14f9",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "iJgxjtOzQEaX6oWc",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

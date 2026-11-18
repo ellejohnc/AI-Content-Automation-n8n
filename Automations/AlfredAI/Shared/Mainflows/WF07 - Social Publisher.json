@@ -1,0 +1,38 @@
+{
+  "name": "WF07 - Social Publisher",
+  "nodes": [],
+  "pinData": {},
+  "connections": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "02bdc73e-26d9-42db-adf4-8ac50e788db8",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "TQcth78fwh2wHSRz",
+  "tags": [
+    {
+      "updatedAt": "2026-03-12T09:27:25.080Z",
+      "createdAt": "2026-03-12T09:27:25.080Z",
+      "id": "PlKY7hzZwNVyuVaY",
+      "name": "In-Progress"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

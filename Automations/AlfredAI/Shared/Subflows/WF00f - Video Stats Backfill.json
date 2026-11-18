@@ -1,0 +1,834 @@
+{
+  "name": "WF00f - Video Stats Backfill",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * *"
+            }
+          ]
+        }
+      },
+      "id": "d379b7ba-f33a-4d1e-aeaf-af147ced67a1",
+      "name": "1. Daily 4am Sydney",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        1424,
+        3200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id",
+          "cachedResultName": "AlfredAI"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblWBISPAy99YtoPw",
+          "mode": "id",
+          "cachedResultName": "Video Library"
+        },
+        "filterByFormula": "AND(\n  OR(\n    {View Count} = '',\n    {View Count} = 0,\n    {Like Count} = '',\n    {Like Count} = 0,\n    {Comment Count} = '',\n    {Comment Count} = 0,\n    {Duration} = '',\n    {Duration} = 0,\n    {Creator_Handle} = ''\n  ),\n  NOT({URL} = '')\n)",
+        "options": {
+          "fields": [
+            "Video ID",
+            "Title",
+            "URL",
+            "Platform",
+            "View Count",
+            "Like Count",
+            "Comment Count",
+            "Duration",
+            "Published At",
+            "Outlier Score",
+            "Creator_Handle",
+            "Channel ID"
+          ]
+        }
+      },
+      "id": "a5929d6a-de69-4a76-9d3e-fa71d4364970",
+      "name": "2. Get Records With Missing Stats",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1648,
+        3104
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "am",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9491152a-aed8-4b92-81e5-6aca15da6910",
+      "name": "3. Any Missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        3104
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "e1e73ed2-1fef-462a-afd0-1fbf8070bcb1",
+      "name": "4. Batch (1 at a time)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2096,
+        3104
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nconst _airtableRecordId = $input.item.json.id || $input.item.id || '';\nconst rawUrl = item['URL'] || '';\nconst platform = (item['Platform'] || '').toLowerCase();\nconst channelId = item['Channel ID'] || '';\n\nlet url = rawUrl.split('?')[0].replace(/\\/$/, '');\nurl = url.replace('/reel/', '/reels/');\n\nlet identifier = '', identifierType = '';\n\nif (platform === 'youtube' || rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be')) {\n  if (rawUrl.includes('watch?v=')) { identifier = rawUrl.split('watch?v=')[1].split('&')[0]; identifierType = 'video'; }\n  else if (url.includes('shorts/')) { identifier = url.split('shorts/')[1].split('?')[0]; identifierType = 'video'; }\n  else if (rawUrl.includes('youtu.be/')) { identifier = rawUrl.split('youtu.be/')[1].split('?')[0]; identifierType = 'video'; }\n} else if (platform === 'instagram' || url.includes('instagram.com')) {\n  const match = url.match(/\\/(reels?|p|tv)\\/([^/?]+)/);\n  identifier = match ? match[2] : '';\n  identifierType = 'post';\n} else if (platform === 'tiktok' || url.includes('tiktok.com')) {\n  if (url.includes('/video/')) { identifier = url.split('/video/')[1].split('?')[0]; identifierType = 'video'; }\n}\n\nif (!identifier) {\n  return { json: { skip: true, _airtableRecordId, reason: 'Cannot parse URL: ' + rawUrl } };\n}\n\nreturn { json: {\n  skip: false,\n  _airtableRecordId,\n  platform: item['Platform'] || '',\n  identifier,\n  identifierType,\n  url: rawUrl,\n  rawUrl,\n  channelId,\n  _batchIndex: $input.item.index || 0,\n  existingOutlierScore: item['Outlier Score'] || 0,\n  existingViewCount: item['View Count'] || 0,\n  existingLikeCount: item['Like Count'] || 0,\n  existingCommentCount: item['Comment Count'] || 0,\n  existingDuration: item['Duration'] || 0,\n  existingCreatorHandle: item['Creator_Handle'] || ''\n}};\n"
+      },
+      "id": "21d56020-2adc-4511-93b7-502cab59e6c1",
+      "name": "5. Parse URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        2672
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cr",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7c5618d5-eaa4-411c-a3d7-d57968a3eb55",
+      "name": "6. Can Resolve?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2544,
+        2672
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.item.json;\nconst platform = (p.platform || '').toLowerCase();\nconst MAX_SUPADATA_CALLS = 25;\n\n// YouTube uses Google API — no Supadata cost, always allow\nif (platform === 'youtube') {\n  return { json: { ...p, _allowApi: true } };\n}\n\n// For TikTok/Instagram — check if ONLY Creator_Handle is missing\n// If so, skip the API entirely — not worth a credit for just the handle\nconst missingView = !p.existingViewCount || p.existingViewCount === 0;\nconst missingLike = !p.existingLikeCount || p.existingLikeCount === 0;\nconst missingComment = !p.existingCommentCount || p.existingCommentCount === 0;\nconst missingDuration = !p.existingDuration || p.existingDuration === 0;\nconst missingHandle = !p.existingCreatorHandle || p.existingCreatorHandle === '';\n\nconst onlyHandleMissing = missingHandle && !missingView && !missingLike && !missingComment && !missingDuration;\n\nif (onlyHandleMissing) {\n  return { json: { \n    ...p, \n    _allowApi: false, \n    _reason: 'Only Creator_Handle missing — skipping Supadata call'\n  }};\n}\n\n// Hard cap on Supadata calls per run\nconst batchIndex = p._batchIndex || 0;\nif (batchIndex >= MAX_SUPADATA_CALLS) {\n  return { json: { \n    ...p, \n    _allowApi: false, \n    _reason: 'Supadata cap reached (' + MAX_SUPADATA_CALLS + ' calls/run)'\n  }};\n}\n\nreturn { json: { ...p, _allowApi: true } };\n"
+      },
+      "id": "3a1888c0-e7c5-49d0-8a28-0e381229bc19",
+      "name": "6b. Supadata Cap Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2768,
+        2672
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cap",
+              "leftValue": "={{ $json._allowApi }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "27b04ec4-d21b-4977-bb49-1a423a47c8e9",
+      "name": "6c. Allow API?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2992,
+        2672
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "yt",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "YouTube",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "YouTube"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "ti",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "TikTok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "TikTok"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "ig",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "Instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Instagram"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ca7c668b-ba54-4904-bebc-cf0a70d5ad5a",
+      "name": "7. Platform Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        3216,
+        2656
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id={{ $json.identifier }}&key=AIzaSyCiu4jOmy7kvNLMU9KAFcHhIW8ZVfB4OkQ",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "1ce59b3b-471f-42ed-b0e8-a0688d1686d7",
+      "name": "8a. Fetch YouTube Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3440,
+        2480
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/youtube/v3/channels?part=snippet&id={{ $('5. Parse URL').item.json.channelId || $input.item.json.items[0].snippet.channelId }}&key=AIzaSyCiu4jOmy7kvNLMU9KAFcHhIW8ZVfB4OkQ",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "1ce20b26-7c2f-4566-bd29-d5733c587e33",
+      "name": "8a2. Fetch YouTube Channel Handle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3664,
+        2480
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://api.supadata.ai/v1/metadata",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.rawUrl || $json.url }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "c0c00bcc-f360-4732-950a-d30a8b15cb16",
+      "name": "8b. Fetch TikTok Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3440,
+        2672
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L01j4MGWxdfH53sL",
+          "name": "SUPADATA"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://api.supadata.ai/v1/metadata",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.rawUrl || $json.url }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "81384ae3-2313-4dc1-bb35-3a8c72576214",
+      "name": "8c. Fetch Instagram Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3440,
+        2864
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L01j4MGWxdfH53sL",
+          "name": "SUPADATA"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// YouTube Data API response parser\nconst item = $input.item.json;\nconst _airtableRecordId = $('5. Parse URL').item.json._airtableRecordId || '';\nconst parsed = $('5. Parse URL').item.json;\n\nconst ytItems = item.items || [];\nconst yt = ytItems[0] || null;\n\nconst fields = {};\n\nif (yt) {\n  const stats = yt.statistics || {};\n  const snippet = yt.snippet || {};\n  const contentDetails = yt.contentDetails || {};\n\n  const existingVC = parsed.existingViewCount;\n  if (!existingVC || existingVC === 0 || existingVC === '' || existingVC === null) {\n    const v = parseInt(stats.viewCount || 0);\n    if (v > 0) fields['View Count'] = v;\n  }\n\n  const existingLC = parsed.existingLikeCount;\n  if (!existingLC || existingLC === 0 || existingLC === '' || existingLC === null) {\n    const l = parseInt(stats.likeCount || 0);\n    if (l > 0) fields['Like Count'] = l;\n  }\n\n  const existingCC = parsed.existingCommentCount;\n  if (!existingCC || existingCC === 0 || existingCC === '' || existingCC === null) {\n    const c = parseInt(stats.commentCount || 0);\n    if (c > 0) fields['Comment Count'] = c;\n  }\n\n  const existingDur = parsed.existingDuration;\n  if (!existingDur || existingDur === 0 || existingDur === '' || existingDur === null) {\n    const dur = contentDetails.duration || 'PT0S';\n    let s = 0;\n    const m = dur.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/);\n    if (m) s = (parseInt(m[1]||0)*3600)+(parseInt(m[2]||0)*60)+parseInt(m[3]||0);\n    if (s > 0) fields['Duration'] = s;\n  }\n\n  const existingHandle = parsed.existingCreatorHandle;\n  if (!existingHandle || existingHandle === '' || existingHandle === null) {\n    try {\n      const channelItems = $('8a2. Fetch YouTube Channel Handle').item.json.items || [];\n      const channelSnippet = (channelItems[0] || {}).snippet || {};\n      const handle = channelSnippet.customUrl || '';\n      if (handle) fields['Creator_Handle'] = handle.startsWith('@') ? handle : '@' + handle;\n    } catch(e) {}\n  }\n\n  const isUpdatingStats = fields['View Count'] !== undefined || fields['Like Count'] !== undefined || fields['Comment Count'] !== undefined;\n  if (isUpdatingStats) {\n    const viewCount = fields['View Count'] || parsed.existingViewCount || 0;\n    if (viewCount > 0) {\n      fields['Outlier Score'] = Math.round((viewCount / 10000) * 100) / 100;\n    }\n  }\n}\n\nconst hasFieldsToUpdate = Object.keys(fields).length > 0;\n\nreturn { json: {\n  ...item,\n  _airtableRecordId,\n  _skipUpdate: !hasFieldsToUpdate,\n  _reason: hasFieldsToUpdate ? 'Has fields to update' : 'No missing fields to fill',\n  _fields: fields\n}};\n"
+      },
+      "id": "7e32319e-625c-45bc-b650-5d08c2e41ead",
+      "name": "9a. Parse YouTube Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3888,
+        2480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Supadata response parser for TikTok & Instagram\nconst item = $input.item.json;\nconst raw = item;\nconst stats = raw.stats || {};\nconst media = raw.media || {};\nconst author = raw.author || {};\n\nconst _airtableRecordId = $('5. Parse URL').item.json._airtableRecordId || '';\nconst parsed = $('5. Parse URL').item.json;\n\nconst fields = {};\n\nif (!parsed.existingViewCount || parsed.existingViewCount === 0) {\n  const v = parseInt(stats.views || stats.viewCount || stats.play_count || 0);\n  if (v > 0) fields['View Count'] = v;\n}\n\nif (!parsed.existingLikeCount || parsed.existingLikeCount === 0) {\n  const l = parseInt(stats.likes || stats.likeCount || stats.digg_count || 0);\n  if (l > 0) fields['Like Count'] = l;\n}\n\nif (!parsed.existingCommentCount || parsed.existingCommentCount === 0) {\n  const c = stats.comments !== undefined ? parseInt(stats.comments) :\n            stats.commentCount !== undefined ? parseInt(stats.commentCount) :\n            stats.comment_count !== undefined ? parseInt(stats.comment_count) : null;\n  if (c !== null) fields['Comment Count'] = c;\n}\n\nif (!parsed.existingDuration || parsed.existingDuration === 0) {\n  const d = parseInt(media.duration || raw.duration || 0);\n  if (d > 0) fields['Duration'] = d;\n}\n\nif (!parsed.existingCreatorHandle || parsed.existingCreatorHandle === '') {\n  const handle = author.uniqueId || author.username || raw.authorUniqueId || raw.ownerUsername || raw.channelHandle || '';\n  if (handle) fields['Creator_Handle'] = handle.startsWith('@') ? handle : '@' + handle;\n}\n\nconst isUpdatingStats = fields['View Count'] !== undefined || fields['Like Count'] !== undefined || fields['Comment Count'] !== undefined;\nif (isUpdatingStats) {\n  const viewCount = fields['View Count'] || parsed.existingViewCount || 0;\n  if (viewCount > 0) {\n    fields['Outlier Score'] = Math.round((viewCount / 10000) * 100) / 100;\n  }\n}\n\nconst hasFieldsToUpdate = Object.keys(fields).length > 0;\n\nreturn { json: {\n  ...item,\n  _airtableRecordId,\n  _skipUpdate: !hasFieldsToUpdate,\n  _reason: hasFieldsToUpdate ? 'Has fields to update' : 'No missing fields to fill',\n  _fields: fields\n}};\n"
+      },
+      "id": "2c0f8660-f43c-4b58-8875-9094b28ae5e3",
+      "name": "9b. Parse TikTok/Instagram Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3664,
+        2768
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "su",
+              "leftValue": "={{ $json._skipUpdate }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "29f678f7-eeae-4167-978b-b8794bff39ad",
+      "name": "10. Has Stats to Update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4112,
+        2768
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nconst airtableRecordId = item._airtableRecordId || '';\nconst fields = item._fields || {};\n\nif (!airtableRecordId) {\n  return { json: { ...item, _skipUpdate: true, _reason: 'No Airtable record ID found' } };\n}\n\nconst payload = {\n  records: [\n    {\n      id: airtableRecordId,\n      fields: fields\n    }\n  ]\n};\n\nreturn { json: { ...item, _airtablePayload: JSON.stringify(payload) } };\n"
+      },
+      "id": "6182b03b-53bf-442f-9c48-dbfbbd991da9",
+      "name": "11a. Build Airtable Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4336,
+        2768
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.airtable.com/v0/appgBzSHGSK2v8B6g/tblWBISPAy99YtoPw",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json._airtablePayload }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3cfb059d-c17f-4198-a248-b5c72315eb28",
+      "name": "11b. Update Video Library Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        4560,
+        2768
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "1e544db3-3401-4d34-9cc7-e42dfd86c4d0",
+      "name": "12. Next Batch",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4784,
+        2848
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        1424,
+        3008
+      ],
+      "id": "0be9dacc-cfff-4880-975d-90545990de7f",
+      "name": "When clicking ‘Execute workflow’"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "1. Daily 4am Sydney": {
+      "main": [
+        [
+          {
+            "node": "2. Get Records With Missing Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Get Records With Missing Stats": {
+      "main": [
+        [
+          {
+            "node": "3. Any Missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Any Missing?": {
+      "main": [
+        [
+          {
+            "node": "4. Batch (1 at a time)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Batch (1 at a time)": {
+      "main": [
+        [],
+        [
+          {
+            "node": "5. Parse URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Parse URL": {
+      "main": [
+        [
+          {
+            "node": "6. Can Resolve?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Can Resolve?": {
+      "main": [
+        [
+          {
+            "node": "6b. Supadata Cap Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4. Batch (1 at a time)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Supadata Cap Check": {
+      "main": [
+        [
+          {
+            "node": "6c. Allow API?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6c. Allow API?": {
+      "main": [
+        [
+          {
+            "node": "7. Platform Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4. Batch (1 at a time)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Platform Switch": {
+      "main": [
+        [
+          {
+            "node": "8a. Fetch YouTube Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8b. Fetch TikTok Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8c. Fetch Instagram Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8a. Fetch YouTube Metadata": {
+      "main": [
+        [
+          {
+            "node": "8a2. Fetch YouTube Channel Handle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8a2. Fetch YouTube Channel Handle": {
+      "main": [
+        [
+          {
+            "node": "9a. Parse YouTube Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8b. Fetch TikTok Metadata": {
+      "main": [
+        [
+          {
+            "node": "9b. Parse TikTok/Instagram Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8c. Fetch Instagram Metadata": {
+      "main": [
+        [
+          {
+            "node": "9b. Parse TikTok/Instagram Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9a. Parse YouTube Stats": {
+      "main": [
+        [
+          {
+            "node": "10. Has Stats to Update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9b. Parse TikTok/Instagram Stats": {
+      "main": [
+        [
+          {
+            "node": "10. Has Stats to Update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. Has Stats to Update?": {
+      "main": [
+        [
+          {
+            "node": "11a. Build Airtable Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4. Batch (1 at a time)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11a. Build Airtable Payload": {
+      "main": [
+        [
+          {
+            "node": "11b. Update Video Library Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11b. Update Video Library Record": {
+      "main": [
+        [
+          {
+            "node": "12. Next Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. Next Batch": {
+      "main": [
+        [
+          {
+            "node": "4. Batch (1 at a time)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "2. Get Records With Missing Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "043c9228-3fc5-4143-9405-b90e08e6f787",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "fXT2aH53ZtSadzrf",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}

@@ -1,0 +1,953 @@
+{
+  "name": "WF02c - TikTok Topic Miner (Incremental) (Global)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -8928,
+        -2080
+      ],
+      "id": "75bb994d-3071-4f0a-a989-b7812815b56d"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * 1"
+            }
+          ]
+        }
+      },
+      "name": "Weekly Trigger - Mon 6am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -8928,
+        -1888
+      ],
+      "id": "80c53a76-a589-4c89-b868-6a707c40fb94"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "filterByFormula": "AND(NOT({TikTok_Links} = ''), {Status} = 'Active', {TikTok_Backfilled} = TRUE())",
+        "options": {}
+      },
+      "name": "1. Get Active TikTok Sources",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -8704,
+        -2032
+      ],
+      "id": "149c39fc-8428-435f-854c-8fbe68853070",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = $input.all().filter(s => s.json && s.json.id);\nconst cfg = ($input.first().json || {}).cfg || {};\nif (!sources.length) { return [{ json: { _skip: true, cfg, reason: 'No backfilled active TikTok sources' } }]; }\nconst sourceMap = {};\nconst profiles = [];\nconst now = Date.now();\nconst fallback = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\nconst scanDates = [];\nfor (const s of sources) {\n  let raw = (s.json['TikTok_Handle'] || '').replace(/^@/, '').trim();\n  if (!raw) {\n    const url = (s.json['TikTok_Links'] || '');\n    const match = url.match(/tiktok\\.com\\/@([^/?]+)/);\n    if (match) raw = match[1].trim();\n  }\n  if (!raw) continue;\n  profiles.push('https://www.tiktok.com/@' + raw);\n  sourceMap[raw.toLowerCase()] = { source_id: s.json.id || '', source_name: s.json['Source Name'] || '', handle: '@' + raw };\n  const lastScanned = s.json['TikTok_Last_Scanned'];\n  if (lastScanned) scanDates.push(new Date(lastScanned).getTime());\n}\nif (!profiles.length) { return [{ json: { _skip: true, cfg, reason: 'No valid TikTok handles' } }]; }\nlet publishedAfter = fallback;\nif (scanDates.length > 0) {\n  const bufferedTs = Math.min(...scanDates) - (1 * 24 * 60 * 60 * 1000);\n  publishedAfter = new Date(bufferedTs).toISOString().split('T')[0];\n}\nreturn [{ json: { _skip: false, cfg, profiles, source_map: sourceMap, published_after: publishedAfter } }];"
+      },
+      "name": "2a. Prepare Apify Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8480,
+        -2032
+      ],
+      "id": "663fd4ac-bbb2-4108-820c-155c2827bb51"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/clockworks~tiktok-scraper/runs?token=REDACTED_APIFY&maxItems=400",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"profiles\": {{ JSON.stringify($json.profiles) }},\n  \"resultsPerPage\": 15,\n  \"profileSorting\": \"latest\",\n  \"publishedAfter\": \"{{ $json.published_after }}\",\n  \"shouldDownloadVideos\": false,\n  \"shouldDownloadCovers\": false,\n  \"shouldDownloadSubtitles\": false,\n  \"shouldDownloadAvatars\": false\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "name": "2b. Run Apify Actor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -8256,
+        -2032
+      ],
+      "id": "fae195eb-941a-42fa-a913-c2955863421b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const apifyInput = $('2a. Prepare Apify Input').first().json;\nconst cfg = apifyInput.cfg || {};\nconst sourceMap = apifyInput.source_map || {};\nconst allVideos = $('2f. Fetch Dataset').all()\n  .map(i => i.json)\n  .filter(v => v && typeof v === 'object' && !v.error && (v.id || v.video_id));\nif (!allVideos.length) { return [{ json: { _skip: true, cfg, video_id: '', source_id: '', source_name: '', url: '' } }]; }\n\nconst results = [];\nfor (const video of allVideos) {\n  const authorHandle = (video['authorMeta.name'] || (video.authorMeta && video.authorMeta.name) || '').toLowerCase().trim();\n  const sourceInfo = sourceMap[authorHandle] || { source_id: '', source_name: authorHandle, handle: '@' + authorHandle };\n  const videoId = String(video.id || video.video_id || '');\n  if (!videoId) continue;\n  const parseNum = (val) => {\n    if (val == null) return 0;\n    const s = String(val).replace(/,/g, '').trim();\n    if (s.endsWith('M')) return Math.round(parseFloat(s) * 1000000);\n    if (s.endsWith('K')) return Math.round(parseFloat(s) * 1000);\n    return parseInt(s) || 0;\n  };\n  const durationSec = parseInt(video['videoMeta.duration'] || (video.videoMeta && video.videoMeta.duration) || video.duration || 0);\n  const title = video.text || video.desc || video.description || '';\n  let tags = '';\n  if (Array.isArray(video.hashtags)) {\n    tags = video.hashtags.map(h => typeof h === 'string' ? h.replace(/^#/, '') : (h.name || h.title || '')).join(', ');\n  } else if (video.text) {\n    const found = video.text.match(/#[\\w\\u0080-\\uFFFF]+/g);\n    if (found) tags = found.map(h => h.replace(/^#/, '')).join(', ');\n  }\n  const url = video.webVideoUrl || 'https://www.tiktok.com/@' + authorHandle + '/video/' + videoId;\n  results.push({\n    cfg,\n    video_id: videoId, source_id: sourceInfo.source_id, source_name: sourceInfo.source_name,\n    handle: sourceInfo.handle, title, description: title, tags, url,\n    view_count: parseNum(video.playCount), like_count: parseNum(video.diggCount),\n    comment_count: parseNum(video.commentCount), share_count: parseNum(video.shareCount || 0),\n    duration: durationSec, published_at: video.createTimeISO || '',\n    channel_id: authorHandle, content_type: 'TikTok', platform: 'TikTok'\n  });\n}\n\nif (!results.length) { return [{ json: { _skip: true, cfg, video_id: '', source_id: '', source_name: '', url: '' } }]; }\n\nconst historyByChannel = {};\nconst existingRecs = $input.all();\nfor (const rec of existingRecs) {\n  const ch = (rec.json['Channel ID'] || '').toLowerCase().trim();\n  if (!ch) continue;\n  const v = parseInt(rec.json['View Count']) || 0;\n  const ts = rec.json['Published At'] || '';\n  if (!historyByChannel[ch]) historyByChannel[ch] = [];\n  historyByChannel[ch].push({ v, ts });\n}\n\nfunction median(arr) {\n  if (!arr.length) return 0;\n  const s = [...arr].sort((a, b) => a - b);\n  const mid = Math.floor(s.length / 2);\n  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];\n}\n\nconst currentByChannel = {};\nfor (const r of results) {\n  if (!currentByChannel[r.channel_id]) currentByChannel[r.channel_id] = [];\n  currentByChannel[r.channel_id].push({ v: r.view_count, ts: r.published_at });\n}\n\nconst baselineByChannel = {};\nconst allChannels = new Set([...Object.keys(historyByChannel), ...Object.keys(currentByChannel)]);\nfor (const ch of allChannels) {\n  const combined = [...(historyByChannel[ch] || []), ...(currentByChannel[ch] || [])]\n    .filter(x => x.v > 0)\n    .sort((a, b) => String(b.ts).localeCompare(String(a.ts)))\n    .slice(0, 30)\n    .map(x => x.v);\n  baselineByChannel[ch] = median(combined);\n}\n\nconst scored = [];\nfor (const r of results) {\n  const baseline = baselineByChannel[r.channel_id] || 0;\n  const outlierScore = baseline > 0 ? parseFloat((r.view_count / baseline).toFixed(2)) : 0;\n  scored.push({ json: { ...r, outlier_score: outlierScore, baseline_median: baseline } });\n}\nconsole.log('[3] Scored: ' + scored.length);\nreturn scored;"
+      },
+      "name": "3. Extract & Flatten TikTok IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7136,
+        -2032
+      ],
+      "id": "bd73ecf3-cfc5-4654-a4b5-f0907102a0dc"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2a. Prepare Apify Input').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "filterByFormula": "NOT({Video ID} = '')",
+        "options": {
+          "fields": [
+            "Video ID",
+            "Channel ID",
+            "View Count",
+            "Published At"
+          ]
+        }
+      },
+      "name": "4. Get All Existing Video IDs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -6912,
+        -2032
+      ],
+      "id": "45c55e99-b370-44f4-90d7-27a88ea676e2",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingItems = $('4. Get All Existing Video IDs').all();\nconst existingIds = new Set(existingItems.map(i => i.json['Video ID'] || '').filter(id => id !== ''));\nconst incomingItems = $input.all();\nconst cfg = (incomingItems[0] && incomingItems[0].json && incomingItems[0].json.cfg) || {};\nconst seenThisRun = new Set();\nconst newVideos = incomingItems.filter(item => {\n  if (item.json._skip) return false;\n  const vid = item.json.video_id;\n  if (!vid || existingIds.has(vid) || seenThisRun.has(vid)) return false;\n  seenThisRun.add(vid);\n  return true;\n});\nconsole.log('[5] New: ' + newVideos.length + ' of ' + incomingItems.length);\nif (newVideos.length === 0) return [{ json: { _skip: true, cfg, video_id: '', source_id: '', source_name: '', url: '' } }];\nreturn newVideos;"
+      },
+      "name": "5. Filter New Videos Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6688,
+        -2032
+      ],
+      "id": "81365968-9f68-4e63-b0db-946ba3737233"
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTLIER_THRESHOLD = 2.0;\nconst items = $input.all();\nconst cfg = (items[0] && items[0].json && items[0].json.cfg) || {};\nconst outliers = [];\n\nfunction tierFor(score) {\n  if (score > 5.0) return 'Tier 1: Mega-Viral';\n  if (score >= 2.0) return 'Tier 2: Strong Outlier';\n  return null;\n}\n\nfor (const item of items) {\n  if (item.json._skip) continue;\n  const score = parseFloat(item.json.outlier_score) || 0;\n  const tier = tierFor(score);\n  if (tier) {\n    outliers.push({ json: { ...item.json, _skip: false, is_outlier: true, outlier_threshold: OUTLIER_THRESHOLD, outlier_tier: tier } });\n  }\n}\nconsole.log('[5b] Outliers: ' + outliers.length + ' / ' + items.length);\nif (outliers.length === 0) return [{ json: { _skip: true, cfg, video_id: '', source_id: '', source_name: '', url: '' } }];\nreturn outliers;"
+      },
+      "name": "5b. Filter Outliers Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6464,
+        -2032
+      ],
+      "id": "1d5fabd6-024d-4b90-ab6e-342bcc874563"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Video ID": "={{ $json.video_id }}",
+            "Title": "={{ $json.title }}",
+            "URL": "={{ $json.url }}",
+            "Channel ID": "={{ $json.channel_id }}",
+            "Description": "={{ $json.description }}",
+            "Tags": "={{ $json.tags }}",
+            "Published At": "={{ $json.published_at }}",
+            "View Count": "={{ $json.view_count }}",
+            "Like Count": "={{ $json.like_count }}",
+            "Comment Count": "={{ $json.comment_count }}",
+            "Duration": "={{ $json.duration }}",
+            "Content Type": "={{ $json.content_type }}",
+            "Platform": "={{ $json.platform }}",
+            "Source Name": "={{ $json.source_name }}",
+            "Associated_Sources": "={{ $json.source_id ? [$json.source_id] : [] }}",
+            "Status": "New",
+            "Outlier Score": "={{ $json.outlier_score || 0 }}",
+            "Creator_Handle": "={{ $json.handle }}",
+            "Outlier Tier": "={{ $json.outlier_tier }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "9. Create Video Library Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -5568,
+        -2176
+      ],
+      "id": "49414f41-3426-42ae-a63d-2dcaca093beb",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('2a. Prepare Apify Input').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "filterByFormula": "AND({Platform} = 'TikTok', NOT({Source Name} = ''))",
+        "options": {
+          "fields": [
+            "Source Name"
+          ]
+        }
+      },
+      "name": "9a. Get Video Library Counts",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -6016,
+        -1984
+      ],
+      "id": "8c7aabab-ae8d-43fd-bda5-40d2945032a6",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = $('1. Get Active TikTok Sources').all().filter(s => s.json && s.json.id);\nconst cfg = $('2a. Prepare Apify Input').first().json.cfg || {};\nconst allVLRecords = $('9a. Get Video Library Counts').all();\nconst actualCountByName = {};\nfor (const rec of allVLRecords) {\n  const sn = rec.json['Source Name'] || '';\n  if (sn) actualCountByName[sn] = (actualCountByName[sn] || 0) + 1;\n}\nconst today = new Date().toISOString().split('T')[0];\nconst results = [];\nfor (const source of sources) {\n  const sourceName = source.json['Source Name'] || '';\n  results.push({ json: { cfg, source_id: source.json.id, source_name: sourceName, videos_found: actualCountByName[sourceName] || 0, last_scanned: today } });\n}\nif (!results.length) return [];\nreturn results;"
+      },
+      "name": "9b. Aggregate by Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5792,
+        -1984
+      ],
+      "id": "ba8bab48-ac84-4b05-b31b-483dbae2724f"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.source_id }}",
+            "Videos Found": "={{ $json.videos_found }}",
+            "TikTok_Last_Scanned": "={{ $json.last_scanned }}",
+            "Last Checked": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "10b. Final Source Radar Update",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -5120,
+        -1984
+      ],
+      "id": "2bad699c-c5f2-4e1f-a120-361a173221d0",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "01001e62-ce72-448c-a846-e70fd4f08574",
+      "name": "Sources Loop Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -5344,
+        -1936
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "id": "9a7b1b2c-4aec-4339-a4db-910270a51e25",
+      "name": "2c. Wait For Run",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        -8032,
+        -2032
+      ],
+      "webhookId": "cc9c7d46-d1b1-4bc1-ade2-18b6eff071f4"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apify.com/v2/actor-runs/{{ $('2b. Run Apify Actor').first().json.data.id }}?token=REDACTED_APIFY",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "47b6dcbb-b24d-4de1-adce-3aca85c8bc8a",
+      "name": "2d. Check Run Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -7808,
+        -2080
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f1",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "SUCCEEDED"
+            },
+            {
+              "id": "f2",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "FAILED"
+            },
+            {
+              "id": "f3",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "ABORTED"
+            },
+            {
+              "id": "f4",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "TIMED-OUT"
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "3385cf0c-ccb6-46f6-a0fa-2451b653c532",
+      "name": "2e. Run Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -7584,
+        -2032
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apify.com/v2/datasets/{{ $('2d. Check Run Status').first().json.data.defaultDatasetId }}/items?format=json&clean=true&token=REDACTED_APIFY&limit=400",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "0863acf6-66dc-40e2-af56-cf98f30c6e02",
+      "name": "2f. Fetch Dataset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -7360,
+        -2032
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "cbc14585-5060-4f3d-9e64-9e49c68b668a",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -8928,
+        -1984
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  out.push({ json: { client_name: name, video_base_id: c['Video_Base_ID'] } });\n}\nreturn out;"
+      },
+      "id": "0d51caf5-e072-42aa-a1ef-fec67d64f303",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8816,
+        -1984
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "6b8bb476-79cb-46c1-a07b-8e654eb9daef",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -8704,
+        -1888
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "fb9cd707-bb69-4e32-9ff1-25a103f2642e",
+      "name": "1c. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8592,
+        -2032
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasout",
+              "leftValue": "={{ $json._skip }}",
+              "operator": {
+                "operation": "false",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "f65ce790-95fb-4d10-ba98-4f4ff858af8a",
+      "name": "5c. Has Outliers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -6240,
+        -2032
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hascfg",
+              "leftValue": "={{ $json._skip }}",
+              "operator": {
+                "operation": "false",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "7cc32a8d-90a4-4ba8-bbb7-8fb5be2865a2",
+      "name": "2g. No Dataset Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -8368,
+        -1888
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "5. Filter New Videos Only": {
+      "main": [
+        [
+          {
+            "node": "5b. Filter Outliers Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9a. Get Video Library Counts": {
+      "main": [
+        [
+          {
+            "node": "9b. Aggregate by Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Run Apify Actor": {
+      "main": [
+        [
+          {
+            "node": "2c. Wait For Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Wait For Run": {
+      "main": [
+        [
+          {
+            "node": "2d. Check Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2d. Check Run Status": {
+      "main": [
+        [
+          {
+            "node": "2e. Run Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2e. Run Finished?": {
+      "main": [
+        [
+          {
+            "node": "2f. Fetch Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2c. Wait For Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Trigger - Mon 6am": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "Sources Loop Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Active TikTok Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Active TikTok Sources": {
+      "main": [
+        [
+          {
+            "node": "1c. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "2a. Prepare Apify Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2a. Prepare Apify Input": {
+      "main": [
+        [
+          {
+            "node": "2g. No Dataset Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2g. No Dataset Guard": {
+      "main": [
+        [
+          {
+            "node": "2b. Run Apify Actor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2f. Fetch Dataset": {
+      "main": [
+        [
+          {
+            "node": "4. Get All Existing Video IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Get All Existing Video IDs": {
+      "main": [
+        [
+          {
+            "node": "3. Extract & Flatten TikTok IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Extract & Flatten TikTok IDs": {
+      "main": [
+        [
+          {
+            "node": "5. Filter New Videos Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Filter Outliers Only": {
+      "main": [
+        [
+          {
+            "node": "5c. Has Outliers?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5c. Has Outliers?": {
+      "main": [
+        [
+          {
+            "node": "9. Create Video Library Records",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9a. Get Video Library Counts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Create Video Library Records": {
+      "main": [
+        [
+          {
+            "node": "9a. Get Video Library Counts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9b. Aggregate by Source": {
+      "main": [
+        [
+          {
+            "node": "10b. Final Source Radar Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10b. Final Source Radar Update": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "Australia/Sydney"
+  },
+  "versionId": "b4a10721-ecf3-4736-a263-c977d455ca7b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "s2zbZ1ptmZxtxsAi",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

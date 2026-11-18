@@ -1,0 +1,888 @@
+{
+  "name": "WF02-Backfill - YouTube Historical Backfill (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        13600,
+        4512
+      ],
+      "id": "d822c8c0-0c8c-4070-bb2a-bf10ebb0d50d"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * 0"
+            }
+          ]
+        }
+      },
+      "name": "Weekly Trigger - Sunday 2am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        13600,
+        4704
+      ],
+      "id": "bb2a2b34-3c88-4bf7-8ef1-0f5217de5e6f"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "filterByFormula": "AND(NOT({YouTube_Links} = ''), {Status} = 'Active', NOT({YouTube Channel ID} = ''), NOT({YouTube_Backfilled} = TRUE()))",
+        "options": {}
+      },
+      "name": "1. Get Unbackfilled YouTube Sources",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        13824,
+        4608
+      ],
+      "id": "dbaa158b-9e0f-4d01-9141-42936345085a",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "1b. Any to Backfill?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        14048,
+        4608
+      ],
+      "id": "05336072-7c06-44bf-b528-2d331588b304"
+    },
+    {
+      "parameters": {},
+      "name": "Nothing to Backfill",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        14496,
+        4592
+      ],
+      "id": "8b2a2c6d-0389-4e72-8c6c-f30d2287c83d"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "2. One Source at a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        14272,
+        4496
+      ],
+      "id": "2fe3dc4a-d2ee-4c96-93c5-ed1c489f2d2c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first();\nconst source_id = s.json.id || '';\nconst source_name = s.json['Source Name'] || '';\nconst channel_id = s.json['YouTube Channel ID'] || '';\nconst yt_link = s.json['YouTube_Links'] || '';\nif (!channel_id) {\n  console.log('[2a] No Channel ID for: ' + source_name);\n  return [{ json: { _skip: true, source_id, source_name } }];\n}\nconst lowerLink = yt_link.toLowerCase();\nlet content_filter = 'all';\nif (lowerLink.includes('/shorts')) content_filter = 'shorts_only';\nelse if (lowerLink.includes('/videos')) content_filter = 'videos_only';\nconst currentYearStart = new Date().getFullYear() + '-01-01T00:00:00Z';\nconsole.log('[2a] Processing: ' + source_name + ' (' + channel_id + ')');\nreturn [{ json: { source_id, source_name, channel_id, content_filter, currentYearStart, yt_link } }];"
+      },
+      "name": "2a. Prepare Source Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14496,
+        4272
+      ],
+      "id": "373bd156-b0c8-4d7f-a765-3619e5d491df"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "2b. Has Valid Channel?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        14720,
+        4272
+      ],
+      "id": "bade72a1-bc8b-4c40-ad3d-54abc47c2b86"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/youtube/v3/search?part=id&channelId={{ $json.channel_id }}&type=video&publishedAfter={{ $json.currentYearStart }}&maxResults=50&order=date&key=AIzaSyCiu4jOmy7kvNLMU9KAFcHhIW8ZVfB4OkQ",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "name": "3. Fetch Video IDs (YouTube Search)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        14944,
+        4352
+      ],
+      "id": "0a60710e-fdd7-4f89-9eb7-95757f6d7393"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceInput = $('2a. Prepare Source Input').first().json;\nconst source_id = sourceInput.source_id;\nconst source_name = sourceInput.source_name;\nconst content_filter = sourceInput.content_filter || 'all';\n\nconst raw = $input.first().json;\nif (!raw || raw.error || (raw.statusCode && raw.statusCode >= 400)) {\n  console.log('[4] YouTube Search error for: ' + source_name + ' | ' + JSON.stringify(raw?.error || raw?.statusCode));\n  return [{ json: { _skip_videos: true, source_id, source_name } }];\n}\n\nconst items = raw.items || [];\nconst allIds = [...new Set(items.filter(i => i.id && i.id.videoId).map(i => i.id.videoId))];\n\nconsole.log('[4] ' + source_name + ': ' + allIds.length + ' video IDs from YouTube Search');\nif (!allIds.length) return [{ json: { _skip_videos: true, source_id, source_name } }];\n\nreturn allIds.map(video_id => ({ json: { video_id, source_id, source_name, content_filter } }));"
+      },
+      "name": "4. Extract Video IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        15168,
+        4352
+      ],
+      "id": "b317669a-5cf6-4aba-b3c3-422173837b95"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "filterByFormula": "AND(NOT({Video ID} = ''), {Platform} = 'YouTube')",
+        "options": {
+          "fields": [
+            "Video ID",
+            "Channel ID",
+            "View Count",
+            "Published At"
+          ]
+        }
+      },
+      "name": "5. Get All Existing Video IDs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        15392,
+        4352
+      ],
+      "id": "fac51484-0003-4849-8070-9de5ae57a013",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingItems = $input.all();\nconst existingIds = new Set(existingItems.map(i => i.json['Video ID'] || '').filter(id => id !== ''));\nconst incomingItems = $('4. Extract Video IDs').all();\n\nif (incomingItems.length === 1 && incomingItems[0].json._skip_videos) {\n  const { source_id, source_name } = incomingItems[0].json;\n  console.log('[6] No videos from API for: ' + source_name);\n  return [{ json: { _skip: true, source_id, source_name } }];\n}\n\nconst seenThisRun = new Set();\nconst newVideos = [];\nlet skippedDupe = 0;\n\nfor (const item of incomingItems) {\n  if (item.json._skip_videos) continue;\n  const vid = item.json.video_id;\n  if (!vid || existingIds.has(vid) || seenThisRun.has(vid)) { skippedDupe++; continue; }\n  seenThisRun.add(vid);\n  newVideos.push(item);\n}\n\nconst source_id = incomingItems[0]?.json?.source_id || '';\nconst source_name = incomingItems[0]?.json?.source_name || '';\nconsole.log('[6] Dupes skipped: ' + skippedDupe + ' | New: ' + newVideos.length);\n\nif (!newVideos.length) return [{ json: { _skip: true, source_id, source_name } }];\nreturn newVideos;"
+      },
+      "name": "6. Filter New Videos Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        15616,
+        4352
+      ],
+      "id": "c21629ee-f513-446c-bf14-9e8dff496a2e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "7. Has New Videos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        15840,
+        4352
+      ],
+      "id": "61cb8f0a-12cc-404d-9470-c6dc5e4c523f"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id={{ $input.all().map(i => i.json.video_id).join(',') }}&key=AIzaSyCiu4jOmy7kvNLMU9KAFcHhIW8ZVfB4OkQ",
+        "options": {}
+      },
+      "name": "8. Get Video Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        16064,
+        4448
+      ],
+      "id": "d685c9a0-8079-472b-bdcd-8f002a12dd7c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawItems = $input.all();\nconst metadata = (rawItems[0]?.json?.items) || [];\nconst sourceInput = $('2a. Prepare Source Input').first().json;\nconst source_id = sourceInput.source_id || '';\nconst source_name = sourceInput.source_name || '';\nconst content_filter = sourceInput.content_filter || 'all';\n\n// Gate 1 per AlfredAI Outlier & Relevance Scoring Framework: OS >= 2.0x\n// Platform multiplier (Part 1.3): YouTube -> short-form gets +0.5x added before gating.\nconst OUTLIER_THRESHOLD = 2.0;\nconst YOUTUBE_SHORTFORM_BONUS = 0.5;\nconst MAX_RECORDS = 25;\nconst currentYear = new Date().getFullYear();\nconst currentYearStart = currentYear + '-01-01';\n\nfunction tierFor(score) {\n  if (score > 5.0) return 'Tier 1: Mega-Viral';\n  if (score >= 2.0) return 'Tier 2: Strong Outlier';\n  return null;\n}\n\nconst candidates = [];\nfor (const meta of metadata) {\n  if (!meta || !meta.id) continue;\n  const snippet = meta.snippet || {};\n  const stats = meta.statistics || {};\n  if (!snippet.publishedAt || snippet.publishedAt < currentYearStart) {\n    console.log('[8c] Pre-' + currentYear + ': ' + (snippet.title || meta.id));\n    continue;\n  }\n  const duration = (meta.contentDetails || {}).duration || 'PT0S';\n  let seconds = 0;\n  const m = duration.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/);\n  if (m) seconds = (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);\n  const isShort = content_filter === 'shorts_only' ? true : content_filter === 'videos_only' ? false : seconds <= 60;\n  const contentType = isShort ? 'Short' : 'Video';\n  const url = isShort ? 'https://www.youtube.com/shorts/' + meta.id : 'https://www.youtube.com/watch?v=' + meta.id;\n  candidates.push({\n    video_id: meta.id, title: snippet.title || 'Untitled', url,\n    channel_id: snippet.channelId || '', description: snippet.description || '',\n    tags: Array.isArray(snippet.tags) ? snippet.tags.join(', ') : '',\n    published_at: snippet.publishedAt || '',\n    view_count: parseInt(stats.viewCount || 0), like_count: parseInt(stats.likeCount || 0),\n    comment_count: parseInt(stats.commentCount || 0), duration: seconds,\n    content_type: contentType, platform: 'YouTube', source_id, source_name\n  });\n}\n\nif (!candidates.length) {\n  console.log('[8c] No ' + currentYear + '+ videos');\n  return [{ json: { _skip: true, source_id, source_name } }];\n}\n\n// Per-creator baseline median over last 30 videos (Framework Part 1.1).\nfunction median(arr) {\n  if (!arr.length) return 0;\n  const s = [...arr].sort((a, b) => a - b);\n  const mid = Math.floor(s.length / 2);\n  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];\n}\n\nconst historyByChannel = {};\nlet _existingRecs = [];\ntry {\n  _existingRecs = $('5. Get All Existing Video IDs').all();\n} catch (e) {\n  console.log('[8c] node 5 history unavailable, using current-run median');\n}\nfor (const rec of _existingRecs) {\n  const ch = (rec.json['Channel ID'] || '').trim();\n  if (!ch) continue;\n  const v = parseInt(rec.json['View Count']) || 0;\n  const ts = rec.json['Published At'] || '';\n  if (!historyByChannel[ch]) historyByChannel[ch] = [];\n  historyByChannel[ch].push({ v, ts });\n}\n\nconst currentByChannel = {};\nfor (const c of candidates) {\n  const ch = c.channel_id;\n  if (!currentByChannel[ch]) currentByChannel[ch] = [];\n  currentByChannel[ch].push({ v: c.view_count, ts: c.published_at });\n}\n\nconst baselineByChannel = {};\nconst allChannels = new Set([...Object.keys(historyByChannel), ...Object.keys(currentByChannel)]);\nfor (const ch of allChannels) {\n  const combined = [...(historyByChannel[ch] || []), ...(currentByChannel[ch] || [])]\n    .filter(x => x.v > 0)\n    .sort((a, b) => String(b.ts).localeCompare(String(a.ts)))\n    .slice(0, 30)\n    .map(x => x.v);\n  baselineByChannel[ch] = median(combined);\n}\n\nconst results = [];\nfor (const c of candidates) {\n  const baseline = baselineByChannel[c.channel_id] || 0;\n  const rawScore = baseline > 0 ? parseFloat((c.view_count / baseline).toFixed(2)) : 0;\n  const boostedScore = parseFloat((rawScore + YOUTUBE_SHORTFORM_BONUS).toFixed(2));\n  const tier = tierFor(boostedScore);\n  if (!tier) { console.log('[8c] Skip (' + boostedScore + 'x): ' + c.title.substring(0,40)); continue; }\n  console.log('[8c] OUTLIER (' + boostedScore + 'x, raw ' + rawScore + '): ' + c.title.substring(0,40));\n  results.push({ json: { ...c, outlier_score: boostedScore, raw_outlier_score: rawScore, baseline_median: baseline, outlier_tier: tier } });\n}\n\nresults.sort((a, b) => b.json.outlier_score - a.json.outlier_score);\nconst capped = results.slice(0, MAX_RECORDS);\nconsole.log('[8c] Outliers: ' + results.length + '/' + candidates.length + ' | Saving: ' + capped.length + ' (Gate 1: ' + OUTLIER_THRESHOLD + 'x, +' + YOUTUBE_SHORTFORM_BONUS + ' YT bonus)');\nreturn capped.length > 0 ? capped : [{ json: { _skip: true, source_id, source_name } }];"
+      },
+      "name": "8c. Parse & Score Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16288,
+        4448
+      ],
+      "id": "d54e3111-e34b-4ffe-ac01-7de84d467f72"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "8d. Has Video Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        16512,
+        4448
+      ],
+      "id": "92a6c6ce-0ecd-407f-bdfe-3a70a862be6b"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Always pull source identity from 2a which is stable regardless of which path triggered us\nlet source_id = '';\nlet source_name = '';\ntry {\n  const s = $('2a. Prepare Source Input').first().json;\n  source_id = s.source_id || '';\n  source_name = s.source_name || '';\n} catch(e) {\n  for (const item of $input.all()) {\n    if (item.json.source_id) {\n      source_id = item.json.source_id;\n      source_name = item.json.source_name || '';\n      break;\n    }\n  }\n}\nif (!source_id) {\n  console.log('[10] No source_id found, skipping mark');\n  return [];\n}\nconst today = new Date().toISOString().split('T')[0];\nconsole.log('[10] Preparing to mark backfilled: ' + source_name + ' (' + source_id + ')');\nreturn [{ json: { source_id, source_name, last_scanned: today } }];\n"
+      },
+      "name": "10. Build Mark Backfilled Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        17632,
+        4272
+      ],
+      "id": "e317a0a6-19fd-4bda-858e-27e123e7bbf4"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "name": "Wait 2s Before Mark",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        17856,
+        4272
+      ],
+      "id": "a0321c5c-d14d-44b2-89a3-7a04a7e95a0c",
+      "webhookId": "yt-bf-mark-wait"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.source_id }}",
+            "YouTube_Backfilled": true,
+            "YouTube_Last_Scanned": "={{ $json.last_scanned }}",
+            "Last Checked": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "11. Mark Source Backfilled",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        18304,
+        4272
+      ],
+      "id": "f95c85b2-2b49-44a3-80f1-495262461564",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "name": "Wait 30s Before Next Source",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        18528,
+        4512
+      ],
+      "id": "6a7f8082-9889-4cca-83b4-c364f1722e3b",
+      "webhookId": "yt-bf-next-source"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (!items.length) return [];\n\nconst source_id = items[0].json.source_id || '';\nconst source_name = items[0].json.source_name || '';\n\nconst toRecord = (v) => ({\n  fields: {\n    'Video ID': v.video_id,\n    'Title': v.title,\n    'URL': v.url,\n    'Channel ID': v.channel_id,\n    'Description': v.description,\n    'Tags': v.tags,\n    'Published At': v.published_at,\n    'View Count': v.view_count,\n    'Like Count': v.like_count,\n    'Comment Count': v.comment_count,\n    'Duration': v.duration,\n    'Content Type': v.content_type,\n    'Platform': v.platform,\n    'Source Name': v.source_name,\n    'Associated_Sources': v.source_id ? [v.source_id] : [],\n    'Status': 'New',\n    'Outlier Score': v.outlier_score || 0,\n    'Outlier Tier': v.outlier_tier || ''\n  }\n});\n\nconst chunks = [];\nfor (let i = 0; i < items.length; i += 10) {\n  chunks.push(items.slice(i, i + 10).map(it => toRecord(it.json)));\n}\n\nconsole.log('[9a] ' + items.length + ' records -> ' + chunks.length + ' chunk(s) for: ' + source_name);\nreturn chunks.map((records, idx) => ({\n  json: { records, source_id, source_name, chunk: idx + 1, total_chunks: chunks.length }\n}));"
+      },
+      "name": "9a. Chunk Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16736,
+        4512
+      ],
+      "id": "7f15bddf-99e6-4cbf-a5ad-cda30980e7c9"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/appgBzSHGSK2v8B6g/tblWBISPAy99YtoPw",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: $json.records }) }}",
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "name": "9b. POST Chunk to Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        16960,
+        4512
+      ],
+      "id": "a7c3514b-6e0d-43ac-bab2-cbc4f78af9e0",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "name": "9c. Wait 5s Between Chunks",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        17184,
+        4512
+      ],
+      "id": "9b095c4d-95d7-46e0-9c73-1da44482bd1d",
+      "webhookId": "yt-wait-between-chunks"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source_id = $('9a. Chunk Records').first().json.source_id || '';\nconst source_name = $('9a. Chunk Records').first().json.source_name || '';\nconsole.log('[9d] All chunks inserted for: ' + source_name);\nreturn [{ json: { source_id, source_name } }];"
+      },
+      "name": "9d. All Chunks Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        17408,
+        4512
+      ],
+      "id": "bdd60a7a-63ea-4441-88ee-c34ec1f920e7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-source-id",
+              "leftValue": "={{ $json.source_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "10b. Has Source ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        18080,
+        4272
+      ],
+      "id": "31798d17-4a31-4b4a-8167-0025a9935142"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. Get Unbackfilled YouTube Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Trigger - Sunday 2am": {
+      "main": [
+        [
+          {
+            "node": "1. Get Unbackfilled YouTube Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Unbackfilled YouTube Sources": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Backfill?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Backfill?": {
+      "main": [
+        [
+          {
+            "node": "2. One Source at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to Backfill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. One Source at a Time": {
+      "main": [
+        [
+          {
+            "node": "Nothing to Backfill",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2a. Prepare Source Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2a. Prepare Source Input": {
+      "main": [
+        [
+          {
+            "node": "2b. Has Valid Channel?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Has Valid Channel?": {
+      "main": [
+        [
+          {
+            "node": "3. Fetch Video IDs (YouTube Search)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "10. Build Mark Backfilled Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Fetch Video IDs (YouTube Search)": {
+      "main": [
+        [
+          {
+            "node": "4. Extract Video IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Extract Video IDs": {
+      "main": [
+        [
+          {
+            "node": "5. Get All Existing Video IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Get All Existing Video IDs": {
+      "main": [
+        [
+          {
+            "node": "6. Filter New Videos Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Filter New Videos Only": {
+      "main": [
+        [
+          {
+            "node": "7. Has New Videos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Has New Videos?": {
+      "main": [
+        [
+          {
+            "node": "8. Get Video Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "10. Build Mark Backfilled Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Get Video Metadata": {
+      "main": [
+        [
+          {
+            "node": "8c. Parse & Score Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8c. Parse & Score Metadata": {
+      "main": [
+        [
+          {
+            "node": "8d. Has Video Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8d. Has Video Data?": {
+      "main": [
+        [
+          {
+            "node": "9a. Chunk Records",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "10. Build Mark Backfilled Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. Build Mark Backfilled Payload": {
+      "main": [
+        [
+          {
+            "node": "Wait 2s Before Mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2s Before Mark": {
+      "main": [
+        [
+          {
+            "node": "10b. Has Source ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Mark Source Backfilled": {
+      "main": [
+        [
+          {
+            "node": "Wait 30s Before Next Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s Before Next Source": {
+      "main": [
+        [
+          {
+            "node": "2. One Source at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9a. Chunk Records": {
+      "main": [
+        [
+          {
+            "node": "9b. POST Chunk to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9b. POST Chunk to Airtable": {
+      "main": [
+        [
+          {
+            "node": "9c. Wait 5s Between Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9c. Wait 5s Between Chunks": {
+      "main": [
+        [
+          {
+            "node": "9d. All Chunks Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9d. All Chunks Done": {
+      "main": [
+        [
+          {
+            "node": "10. Build Mark Backfilled Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10b. Has Source ID?": {
+      "main": [
+        [
+          {
+            "node": "11. Mark Source Backfilled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "3bf2f8dc-99cf-485b-8579-198af62b8578",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "vmL5AwauME8KZvHi",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

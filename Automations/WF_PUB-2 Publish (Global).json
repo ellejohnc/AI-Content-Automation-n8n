@@ -1,0 +1,2727 @@
+{
+  "name": "WF_PUB-2 Publish (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pub-post",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "f74f4a7e-4304-4c3d-b633-fbcf8b902d63",
+      "name": "Webhook Pub Post",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        224,
+        816
+      ],
+      "webhookId": "cb0302db-05a5-4c88-9ce7-1b82c2f6c4e2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Z6tZlprWp169MhI0",
+          "name": "X-Pub-Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nlet viaWebhook = false, wh = null;\ntry { if ($('Webhook Pub Post').isExecuted) { viaWebhook = true; wh = $('Webhook Pub Post').first().json.body; } } catch (e) {}\nif (viaWebhook) {\n  if (typeof wh === 'string') { try { wh = JSON.parse(wh); } catch (e) { wh = {}; } }\n  wh = wh || {};\n  const id = String(wh.recordId || '').trim();\n  const mode = String(wh.mode || 'scheduled').trim().toLowerCase() === 'now' ? 'now' : 'scheduled';\n  return [{ json: { record_id: /^rec[A-Za-z0-9]{14}$/.test(id) ? id : '', raw_id: id.slice(0, 40), mode, trigger: 'webhook' } }];\n}\nconst r = $input.first().json || {};\nif (r.error || !Array.isArray(r.records)) {\n  return [{ json: { record_id: '', raw_id: '', mode: 'now', trigger: 'schedule', queue_error: 'Safety-net search of Posts failed: ' + msg(r.error) } }];\n}\nreturn r.records.slice(0, 10).map(x => ({ json: { record_id: x.id, raw_id: x.id, mode: 'now', trigger: 'schedule' } }));\n"
+      },
+      "id": "d9d79ff2-6d3c-43ea-a205-42753f1fb21f",
+      "name": "A1. Build Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "db9ab739-7c19-4fbe-a305-83a0aed668cf",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "AND({Status}='Ready for Publishing', {Scheduled_For}!='', IS_BEFORE({Scheduled_For}, DATEADD(NOW(), -15, 'minutes')))"
+            },
+            {
+              "name": "pageSize",
+              "value": "20"
+            },
+            {
+              "name": "sort[0][field]",
+              "value": "Scheduled_For"
+            },
+            {
+              "name": "sort[0][direction]",
+              "value": "asc"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "412427b5-2e5a-4109-a216-78f4257f70c9",
+      "name": "A0. Find Overdue Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        624
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "59a6699e-17ce-46b0-bf89-ee6010d1e747",
+      "name": "L. All Posts Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        896,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $input.first().json }];\n"
+      },
+      "id": "7b46defe-f071-43ac-9d10-c87c9f38e6af",
+      "name": "B0. Current Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "91fb5bbf-9855-4a07-90df-693c996453ec",
+      "name": "L. Post Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        672,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $('B0. Current Post').first().json.record_id || 'recNOPOST000000000' }}?returnFieldsByFieldId=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "8fd69cda-9555-41d4-a49f-9c917ea34662",
+      "name": "B1. Get Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        720
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { id:'fldMZqgHtAAjPZqV5', status:'fldLLx1MxCbo1YMk1', sched:'fld5Thc5mvjV3Hw5l' };\nconst msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst q = $('B0. Current Post').first().json;\nconst r = $input.first().json || {};\nconst f = r.fields || {};\nconst base = { record_id: q.record_id, mode: q.mode, trigger: q.trigger, post_number: f[F.id] || '' };\nconst stop = (reason, isErr, fail) => [{ json: { ...base, go: false, skip_reason: reason, skip_error: !!isErr, skip_fail: !!fail } }];\nif (q.queue_error) return stop(q.queue_error, true);\nif (!q.record_id) return stop('Webhook body needs a valid recordId (got \"' + (q.raw_id || '') + '\")', true);\nif (r.error || !r.id) return stop('Posts row ' + q.record_id + ' could not be read: ' + msg(r.error), true);\nconst status = String(f[F.status] || '');\nif (status !== 'Ready for Publishing') return stop('Status is \"' + (status || 'empty') + '\", not Ready for Publishing; nothing posted', false);\nconst sched = f[F.sched] || '';\nconst now = Date.now();\nlet wait_until = new Date(now + 1000).toISOString();\nlet waits = false;\nif (q.mode === 'scheduled') {\n  const t = Date.parse(sched);\n  if (!sched || isNaN(t)) return stop('Scheduled_For is empty, so the post has no time to go out', true, true);\n  if (t > now) { wait_until = new Date(t).toISOString(); waits = true; }\n}\nreturn [{ json: { ...base, go: true, scheduled_for: sched, wait_until, waits } }];\n"
+      },
+      "id": "acdc7f66-5042-40fa-8a3c-0b80a6914fbf",
+      "name": "B2. Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifGo-c1",
+              "leftValue": "={{ $json.go }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bd741404-5e1c-4d71-aa02-39f8a360b4d0",
+      "name": "B3. Ready to Go",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $json.wait_until }}"
+      },
+      "id": "340c530b-8853-4902-90fa-7ea67d66e134",
+      "name": "W1. Wait Until Scheduled_For",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        656
+      ],
+      "webhookId": "be4d70e7-ca03-476a-8034-5f986de20134"
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { status:'fldLLx1MxCbo1YMk1', last_error:'fldWqy7OCqcPHOVoC' };\nconst LOG = { entry:'fldq6KrUxcx5OHQjv', step:'fld3Mm7NZ9wIFLiWb', result:'fldivVeGlqdUUKzEJ', detail:'fldxtKahKB1yoQpsu', at:'fld1IcqfTKH2pG7Rw', post:'fldptSuLBobjarcWG' };\nconst POSTS = 'https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2';\nconst NOPOST = POSTS + '/recNOPOST000000000';\nconst s = $input.first().json || {};\nconst isErr = !!s.skip_error;\nconst fields = {};\nfields[LOG.entry] = 'PUBLISH ' + (s.post_number ? '#' + s.post_number + ' ' : '') + (isErr ? 'error ' : 'not posted ') + (s.record_id || 'no record');\nfields[LOG.step] = isErr ? 'Error' : 'Status check';\nfields[LOG.result] = isErr ? 'Error' : 'OK';\nfields[LOG.detail] = String(s.skip_reason || 'stopped') + '\\nTrigger: ' + (s.trigger || '') + ', mode ' + (s.mode || '');\nfields[LOG.at] = new Date().toISOString();\nif (s.post_number && s.record_id) fields[LOG.post] = [s.record_id];\nconst fail = { fields: {}, typecast: true };\nlet fail_url = NOPOST;\nif (s.skip_fail && s.record_id) {\n  fail_url = POSTS + '/' + s.record_id;\n  fail.fields[F.status] = 'Failed';\n  fail.fields[F.last_error] = 'PUBLISHER: ' + String(s.skip_reason || '');\n}\nreturn [{ json: { log_body: { records: [{ fields }], typecast: true }, fail_url, fail_body: fail } }];\n"
+      },
+      "id": "e5b731a0-9b36-4e5f-a15d-ef733b75e79c",
+      "name": "S1. Build Skip",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4928,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $('B0. Current Post').first().json.record_id || 'recNOPOST000000000' }}?returnFieldsByFieldId=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "409a74cf-459f-4982-9abc-bc9eb71cbf05",
+      "name": "C1. Re-read Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2016,
+        656
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { id:'fldMZqgHtAAjPZqV5', status:'fldLLx1MxCbo1YMk1', sched:'fld5Thc5mvjV3Hw5l' };\nconst msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst g = $('B2. Gate').first().json;\nconst r = $input.first().json || {};\nconst f = r.fields || {};\nconst stop = (reason, isErr) => [{ json: { ...g, go: false, skip_reason: reason, skip_error: !!isErr, skip_fail: false } }];\nif (r.error || !r.id) return stop('Posts row ' + g.record_id + ' could not be re-read before posting: ' + msg(r.error), true);\nconst status = String(f[F.status] || '');\nif (status !== 'Ready for Publishing') return stop('Status changed to \"' + (status || 'empty') + '\" before posting; nothing posted', false);\nif (g.mode === 'scheduled' && Date.parse(f[F.sched] || '') !== Date.parse(g.scheduled_for)) {\n  return stop('Scheduled_For changed from ' + g.scheduled_for + ' to ' + (f[F.sched] || 'empty') + ' while waiting; this run stopped and the new webhook handles the new time', false);\n}\nreturn [{ json: { ...g, go: true, post_number: f[F.id] || g.post_number, fields: f } }];\n"
+      },
+      "id": "bc955abf-d0d1-4cae-b170-605c6b47defe",
+      "name": "C2. Recheck",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifStill-c1",
+              "leftValue": "={{ $json.go }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "78d19a3a-282e-4fd2-8e47-caf0580c63e6",
+      "name": "C3. Still Ready",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2464,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tblyigDCn3l0Ly5gT",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b30e61e4-c7b1-4fa0-a492-b2e2fbe17ba0",
+      "name": "D1. Load Accounts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2688,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "OR({Status}='Publishing', {Status}='Processing Media')"
+            },
+            {
+              "name": "returnFieldsByFieldId",
+              "value": "true"
+            },
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "32f09700-e725-4a79-a794-8a60d2889299",
+      "name": "D2. Load Posts In Progress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2912,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { status:'fldLLx1MxCbo1YMk1', brand:'fldikoXu1b0lSJAdc', platforms:'fldcxI02uuW9wURoB', container:'fldpaHhuPsfTLdt7v', published_on:'fldRaD2nqEF7umE9m' };\nconst msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst c = $('C2. Recheck').first().json;\nconst f = c.fields || {};\nconst accR = $('D1. Load Accounts').first().json || {};\nconst busyR = $input.first().json || {};\nconst ORDER = ['Instagram', 'TikTok', 'LinkedIn'];\nconst TASK = { LinkedIn: 'PUB-4', TikTok: 'PUB-5' };\nconst brandOf = x => { const b = x[F.brand]; return String(Array.isArray(b) ? (b[0] || '') : (b || '')).trim(); };\nconst brand = brandOf(f);\nconst selected = ORDER.filter(p => (f[F.platforms] || []).includes(p));\nconst done = ORDER.filter(p => (f[F.published_on] || []).includes(p));\nconst todo = selected.filter(p => !done.includes(p));\nconst accounts = Array.isArray(accR.records) ? accR.records.map(a => ({ id: a.id, ...(a.fields || {}) })) : [];\nconst accErr = (accR.error || !Array.isArray(accR.records)) ? 'Accounts could not be read: ' + msg(accR.error) : '';\nconst plan = {};\nfor (const p of todo) {\n  const a = accounts.find(x => String(x.Brand || '') === brand && String(x.Platform || '') === p);\n  if (accErr) plan[p] = { action: 'fail', reason: accErr };\n  else if (!a) plan[p] = { action: 'fail', reason: 'no Accounts row for ' + (brand || '(no brand)') + ' ' + p };\n  else if (String(a.Connection || '') !== 'Connected') plan[p] = { action: 'pack', connection: String(a.Connection || 'not set'), account: a.Account || '' };\n  else if (p === 'Instagram') plan[p] = { action: 'api', account_id: String(a.Platform_Account_ID || '').trim(), daily_limit: Number(a.Daily_Limit) || 0, account: a.Account || '' };\n  else plan[p] = { action: 'fail', reason: 'account is Connected but the ' + p + ' branch is not built yet (' + TASK[p] + ')' };\n}\nconst igApi = !!(plan.Instagram && plan.Instagram.action === 'api');\nconst busyRow = igApi && Array.isArray(busyR.records)\n  ? busyR.records.find(x => x.id !== c.record_id && brandOf(x.fields || {}) === brand && ((x.fields || {})[F.platforms] || []).includes('Instagram') && !((x.fields || {})[F.published_on] || []).includes('Instagram'))\n  : null;\nconst token = 'claim:' + $execution.id + ':' + c.record_id;\nconst claim = { fields: {}, typecast: true };\nclaim.fields[F.status] = 'Publishing';\nclaim.fields[F.container] = token;\nreturn [{ json: { ...c, brand, selected, done, todo, plan, busy: !!busyRow, busy_with: busyRow ? busyRow.id : '', claim_token: token, claim_body: claim } }];\n"
+      },
+      "id": "75dc40b1-9917-4330-affc-d20d99966466",
+      "name": "D3. Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifBusy-c1",
+              "leftValue": "={{ $json.busy }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2b64495-3398-4224-978b-7e3934a5af13",
+      "name": "D4. Account Busy",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3360,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "id": "394de13e-758f-4383-bb4f-d7b9f350fbba",
+      "name": "W2. Wait 2 Minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3584,
+        512
+      ],
+      "webhookId": "04a4bfc3-763d-4284-ad20-e209bca1024d"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $('D3. Plan').first().json.record_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('D3. Plan').first().json.claim_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "0b656573-95c4-4fae-a66a-999f56d0b1ac",
+      "name": "E1. Claim Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3808,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 4
+      },
+      "id": "5e8ef7e6-3076-45d1-a351-21cc75b22e00",
+      "name": "W3. Wait 4 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4032,
+        576
+      ],
+      "webhookId": "24f426f7-47be-4a0e-a583-a52874852ae1"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $('D3. Plan').first().json.record_id }}?returnFieldsByFieldId=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "a6a4d280-378b-479a-b2f6-58c12769dde5",
+      "name": "E2. Read Claim",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4256,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { container:'fldpaHhuPsfTLdt7v' };\nconst msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst d = $('D3. Plan').first().json;\nconst p = $('E1. Claim Post').first().json || {};\nconst r = $input.first().json || {};\nconst f = r.fields || {};\nconst stop = (reason, isErr) => [{ json: { ...d, go: false, skip_reason: reason, skip_error: !!isErr, skip_fail: false } }];\nif (p.error || !p.id) return stop('Could not set Status to Publishing: ' + msg(p.error) + '; nothing posted', true);\nif (r.error || !r.id) return stop('Could not confirm the claim on the row: ' + msg(r.error) + '; nothing posted. The row is at Publishing: set it back to Ready for Publishing to retry', true);\nif (String(f[F.container] || '') !== d.claim_token) return stop('Another run picked up this post at the same moment; this run stopped so it is not posted twice', false);\nreturn [{ json: { ...d, go: true, fields: f } }];\n"
+      },
+      "id": "1c6dba47-138a-421b-be93-4706907095fd",
+      "name": "E3. Verify Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4480,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifMine-c1",
+              "leftValue": "={{ $json.go }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4febe59f-1c86-41a9-982f-34cce7eac9fd",
+      "name": "E4. Claim Is Mine",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4704,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { format:'fldELPaGBRMd5tANL', media:'fldLqIce0QsDJeoTx', media_urls:'fldHtFl0ylOgBoTKK', ig_cap:'fldWVBjE44GWpSrpF', src_rec:'fldNmcuPzS1KEsjlR' };\nconst d = $('E3. Verify Claim').first().json;\nconst f = d.fields || {};\nconst p = d.plan.Instagram;\nconst BOUND = { '17841476017741240': 'Instagram - AlfredAI' };\nconst out = o => [{ json: { ig_stage: 'prep', ...o } }];\nif (!p) return out({ ig_action: 'none' });\nif (p.action === 'pack') return out({ ig_action: 'pack' });\nif (p.action !== 'api') return out({ ig_action: 'fail', reason: p.reason || 'not posted' });\nif (!BOUND[p.account_id]) return out({ ig_action: 'fail', reason: 'Instagram account ' + (p.account_id || '(no Platform_Account_ID)') + ' has no credential bound in WF_PUB-2' });\nfunction strip(t) {\n  return String(t || '')\n    .replace(/\\r/g, '')\n    .replace(/^#{1,6}\\s+/gm, '')\n    .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')\n    .replace(/__([^_]+)__/g, '$1')\n    .replace(/(^|\\s)\\*([^*\\n]+)\\*(?=\\s|$)/g, '$1$2')\n    .replace(/`+/g, '')\n    .replace(/\\[([^\\]]+)\\]\\((?:[^)]+)\\)/g, '$1')\n    .replace(/\\\\([#*_\\[\\]()!.+-])/g, '$1')\n    .replace(/^\\s*[*+]\\s+/gm, '- ')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\nconst fmt = String(f[F.format] || '');\nconst media = Array.isArray(f[F.media]) ? f[F.media] : [];\nconst urls = String(f[F.media_urls] || '').split(/\\n+/).map(s => s.trim()).filter(s => /^https?:\\/\\//i.test(s));\nconst isJpeg = a => /^image\\/jpe?g$/i.test(String(a.type || '')) || /\\.jpe?g$/i.test(String(a.filename || ''));\nconst isImage = a => /^image\\//i.test(String(a.type || ''));\nconst caption = strip(f[F.ig_cap]).slice(0, 2200);\nconst hasSource = !!String(f[F.src_rec] || '').trim();\nlet kind = '', items = [], reason = '';\nif (fmt === 'Carousel') {\n  const jpgs = media.filter(isJpeg);\n  if (!hasSource && media.length >= 2 && jpgs.length === media.length) {\n    if (jpgs.length > 10) reason = 'carousel has ' + jpgs.length + ' images; Instagram allows 2 to 10';\n    else { kind = 'CAROUSEL'; items = jpgs.map(a => a.url); }\n  } else reason = 'carousel is PDF-only; not posted';\n} else if (fmt === 'Reel' || fmt === 'Video') {\n  if (!urls.length) reason = 'reel has no public video link in Media_URLs (PUB-7); not posted';\n  else { kind = 'REELS'; items = [urls[0]]; }\n} else {\n  const a = media[0];\n  if (a && isJpeg(a)) items = [a.url];\n  else if (a && isImage(a)) reason = 'image ' + (a.filename || '') + ' is not JPEG; not posted';\n  else if (!a && urls.length) items = [urls[0]];\n  if (!items.length && !reason) reason = 'did not post to Instagram, no photo present';\n  kind = 'IMAGE';\n}\nif (reason) return out({ ig_action: 'fail', reason });\nreturn out({ ig_action: 'post', kind, items, caption, ig_id: p.account_id, daily_limit: p.daily_limit });\n"
+      },
+      "id": "5f39de6c-2b55-4310-bbe7-2f6f388d2bb8",
+      "name": "F1. IG Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4928,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifIgPost-c1",
+              "leftValue": "={{ $json.ig_action }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "post"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f7ff8068-2840-4611-8d14-735b382c9921",
+      "name": "F2. Post to Instagram",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5152,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.ig_id }}/content_publishing_limit?fields=quota_usage,config",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "a6730a2a-be97-4b1d-8788-f984f16a02c5",
+      "name": "G1. IG Check Limit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5376,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Mge1R9FUOG5Erihb",
+          "name": "Instagram - AlfredAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst inp = $input.first().json || {};\nlet res;\nif (inp.ig_stage === 'prep') {\n  if (inp.ig_action === 'none') res = { outcome: 'skipped' };\n  else if (inp.ig_action === 'pack') res = { outcome: 'pack' };\n  else res = { outcome: 'failed', reason: inp.reason || 'not posted' };\n} else if (inp.ig_stage) {\n  res = { outcome: 'failed', reason: inp.reason || 'not posted', container_id: inp.container_id || '' };\n} else {\n  const pub = $('Q1. IG Publish').first().json || {};\n  const cont = $('G6. IG Container Ready').first().json;\n  if (pub.error || !pub.id) res = { outcome: 'failed', reason: 'publish failed: ' + msg(pub.error), container_id: cont.container_id };\n  else res = { outcome: 'published', post_id: String(pub.id), url: inp.permalink || '', container_id: cont.container_id, note: inp.permalink ? '' : 'published, but the permalink could not be read: ' + msg(inp.error) };\n}\nreturn [{ json: { instagram: res } }];\n"
+      },
+      "id": "d894c3f2-d77e-4f17-910a-c0749cbd5850",
+      "name": "R. IG Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8960,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst p = $('F1. IG Prep').first().json;\nconst r = $input.first().json || {};\nconst bad = reason => [{ json: { ig_stage: 'build', ok: false, reason } }];\nif (r.error || !Array.isArray(r.data)) return bad('publishing limit check failed: ' + msg(r.error));\nconst row = r.data[0] || {};\nconst used = Number(row.quota_usage || 0);\nconst caps = [Number((row.config || {}).quota_total) || 0, Number(p.daily_limit) || 0].filter(x => x > 0);\nconst cap = caps.length ? Math.min(...caps) : 0;\nif (cap && used >= cap) return bad('daily publishing limit reached (' + used + ' of ' + cap + ' in 24 hours); not posted');\nconst mk = body => ({ json: { ig_stage: 'build', ok: true, ig_id: p.ig_id, body } });\nif (p.kind === 'CAROUSEL') return p.items.map(u => mk({ image_url: u, is_carousel_item: true }));\nif (p.kind === 'REELS') return [mk({ media_type: 'REELS', video_url: p.items[0], caption: p.caption, share_to_feed: true })];\nreturn [mk({ image_url: p.items[0], caption: p.caption })];\n"
+      },
+      "id": "a53ababf-5ea0-4431-8d1a-c4a86b48af42",
+      "name": "G2. IG Build Containers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5600,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifBuilt-c1",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "684594c4-f60d-4b92-93a1-5f13aeafe9c5",
+      "name": "G2b. Containers Planned",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5824,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.ig_id }}/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 700
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "6d7665df-3f22-43e8-b5b5-2a240487cb4c",
+      "name": "G3. IG Create Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6048,
+        384
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Mge1R9FUOG5Erihb",
+          "name": "Instagram - AlfredAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst p = $('F1. IG Prep').first().json;\nconst res = $input.all().map(i => i.json || {});\nconst bad = res.find(r => r.error || !r.id);\nif (bad || !res.length) return [{ json: { ig_stage: 'container', ok: false, need_parent: false, reason: 'media container was not created: ' + msg(bad && bad.error) } }];\nif (p.kind === 'CAROUSEL') return [{ json: { ig_stage: 'container', ok: true, need_parent: true, ig_id: p.ig_id, parent_body: { media_type: 'CAROUSEL', children: res.map(r => r.id).join(','), caption: p.caption } } }];\nreturn [{ json: { ig_stage: 'container', ok: true, need_parent: false, ig_id: p.ig_id, container_id: String(res[0].id) } }];\n"
+      },
+      "id": "f8d08d57-5f5a-4f8e-a317-af91454c6a50",
+      "name": "G4. IG Collect Containers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6272,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifParent-c1",
+              "leftValue": "={{ $json.need_parent }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "296c82c4-0728-4ccc-8175-0a9422180804",
+      "name": "G4b. Needs Carousel Parent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6496,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.ig_id }}/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.parent_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "a3b8c0dc-30d9-434d-a023-51c06b238dbf",
+      "name": "G5. IG Create Carousel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6720,
+        320
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Mge1R9FUOG5Erihb",
+          "name": "Instagram - AlfredAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { status:'fldLLx1MxCbo1YMk1', container:'fldpaHhuPsfTLdt7v' };\nconst msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst c = $('G4. IG Collect Containers').first().json;\nif (!c.ok) return [{ json: { ig_stage: 'ready', ok: false, reason: c.reason } }];\nlet id = c.container_id || '';\nif (c.need_parent) {\n  const r = $input.first().json || {};\n  if (r.error || !r.id) return [{ json: { ig_stage: 'ready', ok: false, reason: 'carousel container was not created: ' + msg(r.error) } }];\n  id = String(r.id);\n}\nconst save = { fields: {}, typecast: true };\nsave.fields[F.container] = id;\nsave.fields[F.status] = 'Processing Media';\nreturn [{ json: { ig_stage: 'ready', ok: true, container_id: id, ig_id: c.ig_id, save_body: save } }];\n"
+      },
+      "id": "6bbd40a2-1254-4537-9ce1-eedb0d289529",
+      "name": "G6. IG Container Ready",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6944,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifReady-c1",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3ba49120-ec4a-4c86-84c1-6c3761c6f301",
+      "name": "G6b. Container OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7168,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $('E3. Verify Claim').first().json.record_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.save_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "3ff97166-108c-4e15-82bb-8ab1d53723c2",
+      "name": "G7. Save Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7392,
+        320
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('G6. IG Container Ready').first().json;\nlet n = 0;\ntry {\n  if ($('P3. Poll Check').isExecuted) {\n    const prev = $('P3. Poll Check').first().json;\n    if (prev.container_id === c.container_id) n = Number(prev.poll_n) || 0;\n  }\n} catch (e) {}\nreturn [{ json: { container_id: c.container_id, poll_n: n + 1 } }];\n"
+      },
+      "id": "d983a12e-19c0-4bbf-a7c2-4e80f3ea749b",
+      "name": "P1. Poll State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7616,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.container_id }}?fields=status_code,status",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "66bae4df-182c-4793-8809-d0de317c4356",
+      "name": "P2. IG Container Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7840,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Mge1R9FUOG5Erihb",
+          "name": "Instagram - AlfredAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst s = $('P1. Poll State').first().json;\nconst r = $input.first().json || {};\nconst code = String(r.status_code || '');\nlet next = 'retry', reason = '';\nif (code === 'FINISHED') next = 'publish';\nelse if (code === 'EXPIRED') { next = 'fail'; reason = 'media container expired before it was published'; }\nelse if (code === 'ERROR' && s.poll_n >= 4) { next = 'fail'; reason = 'media processing error' + (r.status && r.status !== 'ERROR' ? ': ' + r.status : ' (Instagram could not process the file; check it is MP4 or MOV, H.264 with AAC audio, and that the link downloads the file directly)'); }\nelse if (r.error && s.poll_n >= 3) { next = 'fail'; reason = 'media status could not be read: ' + msg(r.error); }\nelse if (s.poll_n >= 30) { next = 'fail'; reason = 'media was still ' + (code || 'not ready') + ' after 30 checks' + (r.error ? ' (' + msg(r.error) + ')' : ''); }\nreturn [{ json: { ig_stage: 'poll', container_id: s.container_id, poll_n: s.poll_n, next, reason } }];\n"
+      },
+      "id": "bd2c2825-3a30-49a3-9784-d3ce07ec2129",
+      "name": "P3. Poll Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8064,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "sw-retry",
+                    "leftValue": "={{ $json.next }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "retry"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "sw-publish",
+                    "leftValue": "={{ $json.next }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "publish"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "sw-fail",
+                    "leftValue": "={{ $json.next }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "fail"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4210e7aa-3b5e-4ab8-abcd-8816b33762b6",
+      "name": "P4. Poll Result",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        8288,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 20
+      },
+      "id": "c58e6c1c-bbb8-466f-8353-2c1955fb78ff",
+      "name": "W4. Wait 20 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        8512,
+        0
+      ],
+      "webhookId": "68839495-3fe4-4827-b3cc-4de4d0c0cef9"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v23.0/{{ $('G6. IG Container Ready').first().json.ig_id }}/media_publish",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ creation_id: $json.container_id }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "7b73ba6b-e3f0-4426-9d70-8b03dba07340",
+      "name": "Q1. IG Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8512,
+        192
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Mge1R9FUOG5Erihb",
+          "name": "Instagram - AlfredAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.id || '0' }}?fields=id,permalink",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "4568c406-8446-4786-83a5-08f7086a292d",
+      "name": "Q2. IG Get Permalink",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8736,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "Mge1R9FUOG5Erihb",
+          "name": "Instagram - AlfredAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2/{{ $('E3. Verify Claim').first().json.record_id }}?returnFieldsByFieldId=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "921cab9d-8cc7-4ffa-ac82-016f37106a18",
+      "name": "H1. Get Post Final",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9184,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const F = { status:'fldLLx1MxCbo1YMk1', format:'fldELPaGBRMd5tANL', src_base:'fldwhpxkAVFoykdtI', src_rec:'fldNmcuPzS1KEsjlR', container:'fldpaHhuPsfTLdt7v', platform_post_id:'fld9sCrVMH7YbZD6t', published_on:'fldRaD2nqEF7umE9m', post_url:'fld5WL8QpbDqiTENE', published_at:'fld74wJ0iBORMCWYM', attempts:'fldkR8zqpYP4WlBni', last_error:'fldWqy7OCqcPHOVoC', notes:'flda8ENrdb6WzoYFV' };\nconst URLF = { Instagram:'fldmgGUBTRVnPVbJX', TikTok:'fldl3JPvlF04ifE3s', LinkedIn:'fldqJO37S4ATznS1r' };\nconst POSTS = 'https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tbly5qOCxUb6bqat2';\nconst NOPOST = POSTS + '/recNOPOST000000000';\nconst d = $('E3. Verify Claim').first().json;\nconst ig = $('R. IG Result').first().json.instagram || { outcome: 'skipped' };\nconst r = $input.first().json || {};\nconst f = (r.fields && r.id) ? r.fields : (d.fields || {});\nconst ORDER = ['Instagram', 'TikTok', 'LinkedIn'];\nconst SEP = '==============================';\nconst nowIso = new Date().toISOString();\nconst stamp = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' PHT';\nconst results = {};\nfor (const p of d.todo) {\n  const pl = d.plan[p] || {};\n  if (p === 'Instagram' && ig.outcome !== 'skipped') results[p] = { ...ig };\n  else if (pl.action === 'pack') results[p] = { outcome: 'pack' };\n  else results[p] = { outcome: 'failed', reason: pl.reason || 'was not processed' };\n  if (results[p].outcome === 'pack') results[p].connection = pl.connection || 'not set';\n}\nconst live = ORDER.filter(p => (f[F.published_on] || []).includes(p) || (results[p] && results[p].outcome === 'published'));\nconst failed = d.todo.filter(p => results[p].outcome === 'failed');\nconst packs = d.todo.filter(p => results[p].outcome === 'pack');\nconst general = [];\nif (!d.selected.length) general.push('PUBLISHER: no Social Platform is selected');\nif (!d.brand) general.push('PUBLISHER: Brand is empty');\nlet status = 'Publishing';\nif (general.length || failed.length) status = 'Failed';\nelse if (d.selected.every(p => live.includes(p))) status = 'Published';\n\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nlet notes = typeof f[F.notes] === 'string' ? f[F.notes] : '';\nconst blocks = [];\nfor (const p of d.todo) {\n  const x = results[p];\n  const TAG = 'PUBLISHER - ' + p.toUpperCase();\n  const re = new RegExp('\\\\n*' + esc(SEP) + '\\\\n' + esc(TAG) + ' \\\\|[\\\\s\\\\S]*?(?=(\\\\n+' + esc(SEP) + '\\\\n)|$)', 'g');\n  notes = notes.replace(re, '');\n  const lines = [SEP, TAG + ' | ' + stamp];\n  if (x.outcome === 'published') {\n    lines.push('Result: Published');\n    if (x.url) lines.push('Post: ' + x.url);\n    lines.push('Post ID: ' + x.post_id);\n    if (x.note) lines.push('Note: ' + x.note);\n  } else if (x.outcome === 'pack') {\n    lines.push('Result: sent as posting pack');\n    lines.push('Account: ' + x.connection + ', so it cannot be posted by API yet');\n    lines.push('Next: post it through the platform, then mark it as posted (INT-1)');\n  } else {\n    lines.push('Result: Failed');\n    lines.push('Error: ' + x.reason);\n    lines.push('Next: fix the issue, then set Status back to Ready for Publishing to retry');\n  }\n  blocks.push(lines.join('\\n'));\n}\nnotes = [notes.trim()].concat(blocks).filter(Boolean).join('\\n\\n');\n\nconst prevErr = String(f[F.last_error] || '').split('\\n').map(s => s.trim()).filter(Boolean)\n  .filter(l => !d.todo.some(p => l.indexOf(p + ':') === 0) && l.indexOf('PUBLISHER:') !== 0);\nconst lastErr = prevErr.concat(general, failed.map(p => p + ': ' + results[p].reason)).join('\\n');\n\nconst ids = {};\nString(f[F.platform_post_id] || '').split('|').map(s => s.trim()).filter(Boolean).forEach(s => { const i = s.indexOf(':'); if (i > 0) ids[s.slice(0, i).trim()] = s.slice(i + 1).trim(); });\nconst fields = {};\nfields[F.status] = status;\nfields[F.published_on] = live;\nfields[F.notes] = notes;\nfields[F.last_error] = lastErr;\nfields[F.container] = (ig.outcome !== 'skipped' && ig.container_id) ? ig.container_id : '';\nlet firstUrl = '';\nfor (const p of d.todo) {\n  const x = results[p];\n  if (x.outcome !== 'published') continue;\n  if (x.url) { fields[URLF[p]] = x.url; if (!firstUrl) firstUrl = x.url; }\n  ids[p] = x.post_id;\n}\nconst idText = ORDER.filter(p => ids[p]).map(p => p + ': ' + ids[p]).join(' | ');\nif (idText) fields[F.platform_post_id] = idText;\nlet postUrl = String(f[F.post_url] || '');\nif (!postUrl && firstUrl) { postUrl = firstUrl; fields[F.post_url] = firstUrl; }\nif (status === 'Published') fields[F.published_at] = nowIso;\nif (status === 'Failed') fields[F.attempts] = (Number(f[F.attempts]) || 0) + 1;\n\nconst srcBase = String(f[F.src_base] || '').trim();\nconst srcRec = String(f[F.src_rec] || '').trim();\nconst hasSource = /^app[A-Za-z0-9]{14}$/.test(srcBase) && /^rec[A-Za-z0-9]{14}$/.test(srcRec);\nlet source_url = NOPOST, source_body = { fields: {} }, source_do = false;\nif (hasSource && (status === 'Published' || status === 'Failed')) {\n  source_do = true;\n  source_url = 'https://api.airtable.com/v0/' + srcBase + '/tblSBKG2Zx2nZUPIT/' + srcRec;\n  source_body = status === 'Published'\n    ? { fields: { Status: 'Published', Posted_At: nowIso }, typecast: true }\n    : { fields: { Status: 'Publish Failed' }, typecast: true };\n  if (status === 'Published' && postUrl) source_body.fields.Post_URL = postUrl;\n}\nreturn [{ json: {\n  record_id: d.record_id, post_number: d.post_number, brand: d.brand, trigger: d.trigger, mode: d.mode,\n  format: String(f[F.format] || ''), todo: d.todo, results, final_status: status, general, live, packs, failed,\n  published_at: nowIso, has_source: hasSource, src_base: srcBase, src_rec: srcRec,\n  update_url: POSTS + '/' + d.record_id, update_body: { fields, typecast: true },\n  source_do, source_url, source_body\n} }];\n"
+      },
+      "id": "dc09f996-bc8e-4cd9-91e6-1a07b11b87ee",
+      "name": "H2. Build Final Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9408,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.update_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.update_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "fb6b7006-8704-4af9-9469-79102c0e0700",
+      "name": "H3. Update Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9632,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('H2. Build Final Update').first().json.source_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('H2. Build Final Update').first().json.source_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "847e2b18-598f-4fc3-9c79-65f3670ea329",
+      "name": "H4. Update Source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9856,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const LOG = { entry:'fldq6KrUxcx5OHQjv', step:'fld3Mm7NZ9wIFLiWb', result:'fldivVeGlqdUUKzEJ', detail:'fldxtKahKB1yoQpsu', at:'fld1IcqfTKH2pG7Rw', post:'fldptSuLBobjarcWG' };\nconst msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst h = $('H2. Build Final Update').first().json;\nconst up = $('H3. Update Post').first().json || {};\nconst src = $input.first().json || {};\nconst recs = [];\nconst add = (entry, step, ok, detail) => {\n  const fields = {};\n  fields[LOG.entry] = entry; fields[LOG.step] = step; fields[LOG.result] = ok ? 'OK' : 'Error';\n  fields[LOG.detail] = detail; fields[LOG.at] = new Date().toISOString(); fields[LOG.post] = [h.record_id];\n  recs.push({ fields });\n};\nconst head = 'PUBLISH #' + h.post_number + ' ' + h.brand + ' - ';\nfor (const p of h.todo) {\n  const x = h.results[p];\n  if (x.outcome === 'published') add(head + p, 'Published', true, 'Published' + (x.url ? ': ' + x.url : '') + '\\nPost ID: ' + x.post_id + (x.note ? '\\nNote: ' + x.note : ''));\n  else if (x.outcome === 'pack') add(head + p, 'Posting pack', true, 'Account is ' + x.connection + ': sent as posting pack (INT-1).');\n  else add(head + p, 'Error', false, p + ': ' + x.reason);\n}\nfor (const g of h.general) add(head + 'row', 'Error', false, g);\nconst upOk = !(up.error || !up.id);\nconst wb = ['Row set to ' + h.final_status + ' (trigger ' + h.trigger + ', mode ' + h.mode + ').'];\nif (!upOk) wb.push('The Posts row could NOT be updated: ' + msg(up.error) + '. It may still show Publishing.');\nlet srcOk = true;\nif (h.source_do) {\n  srcOk = !(src.error || !src.id);\n  wb.push(srcOk ? 'Source record ' + h.src_rec + ' set to ' + h.source_body.fields.Status + '.' : 'Source record ' + h.src_rec + ' could NOT be updated: ' + msg(src.error));\n}\nadd(head + 'write back', 'Write back', upOk && srcOk, wb.join('\\n'));\nconst do_move = h.final_status === 'Published' && h.has_source;\nreturn [{ json: { ...h, do_move, log_records: recs, log_body: { records: recs.slice(0, 10), typecast: true } } }];\n"
+      },
+      "id": "f7434db4-1835-40d2-b940-8088c9ce4a02",
+      "name": "H5. After Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10080,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifMove-c1",
+              "leftValue": "={{ $json.do_move }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "80cc0b25-5827-4594-8710-dea73d76c643",
+      "name": "H6. File Folder to Posted",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        10304,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.airtable.com/v0/{{ $json.src_base }}/tblSBKG2Zx2nZUPIT/{{ $json.src_rec }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "d672b346-f31a-4e83-aefc-3258f70dbba2",
+      "name": "M1. Get Source Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10528,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appsHn5Vfwdc9mWOh/tblB3yuuTOVIM0tVX",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.log_body || $('S1. Build Skip').first().json.log_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "ae0fad5d-d0d7-4948-b683-05868e00619d",
+      "name": "Z1. Write Publish Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        14112,
+        1088
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://api.airtable.com/v0/apphKduGCjFy3K0c3/tbl0wtV6uKqcawqH8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "={{ \"{Client_Name}='\" + $('H5. After Update').first().json.brand + \"'\" }}"
+            },
+            {
+              "name": "pageSize",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "6132ab4c-393b-43a7-b7d0-02cea15e385c",
+      "name": "M2. Get Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10752,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst h = $('H5. After Update').first().json;\nconst src = $('M1. Get Source Record').first().json || {};\nconst sf = src.fields || {};\nconst cr = $input.first().json || {};\nconst cf = (Array.isArray(cr.records) && cr.records[0]) ? (cr.records[0].fields || {}) : null;\nconst ABOUT = 'https://www.googleapis.com/drive/v3/about?fields=kind';\nconst stop = reason => [{ json: { move_stage: 'pick', move_ok: false, reason, lookup_url: ABOUT } }];\nif (src.error || !src.id) return stop('source record could not be read: ' + msg(src.error));\nif (!cf) return stop('brand ' + h.brand + ' was not found in CONTROL Clients');\nconst isVideo = String(cf.Video_Base_ID || '').trim() === h.src_base;\nconst posted = String((isVideo ? cf.Video_Posted_Folder_ID : cf.Static_Posted_Folder_ID) || '').trim();\nif (!posted) return stop((isVideo ? 'Video_Posted_Folder_ID' : 'Static_Posted_Folder_ID') + ' is empty in CONTROL for ' + h.brand);\nfunction ref(v) {\n  v = String(v || '').split(/[\\n,]+/)[0].trim();\n  if (!v) return '';\n  let m = v.match(/\\/folders\\/([A-Za-z0-9_-]{10,})/);\n  if (m) return m[1];\n  m = v.match(/\\/d\\/([A-Za-z0-9_-]{10,})/) || v.match(/[?&]id=([A-Za-z0-9_-]{10,})/);\n  if (m) return m[1];\n  return /^[A-Za-z0-9_-]{20,}$/.test(v) ? v : '';\n}\nconst order = isVideo ? ['Final_Draft_URL'] : (h.format === 'Carousel' ? ['Carousel_Slide_URLs', 'Static_Asset_URL'] : ['Static_Asset_URL', 'Carousel_Slide_URLs']);\nlet cand = '', field = '';\nfor (const k of order) { cand = ref(sf[k]); if (cand) { field = k; break; } }\nif (!cand) return stop('no Drive link in ' + order.join(' / ') + ' on the source record');\nreturn [{ json: { move_stage: 'pick', move_ok: true, cand_id: cand, link_field: field, posted_id: posted, tz: String(cf.Timezone || 'Asia/Manila'),\n  lookup_url: 'https://www.googleapis.com/drive/v3/files/' + cand + '?fields=id,name,mimeType,parents&supportsAllDrives=true' } }];\n"
+      },
+      "id": "068ae35a-8376-4955-8b87-a52019680aaf",
+      "name": "M3. Pick Folder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10976,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.lookup_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "a243c59c-2bed-47aa-b4ca-cd8ddc1792e6",
+      "name": "M4. Drive Get Item",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        11200,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst m = $('M3. Pick Folder').first().json;\nconst r = $input.first().json || {};\nconst ABOUT = 'https://www.googleapis.com/drive/v3/about?fields=kind';\nif (!m.move_ok) return [{ json: { ...m, lookup2_url: ABOUT } }];\nif (r.error || !r.id) return [{ json: { ...m, move_ok: false, reason: 'Drive item ' + m.cand_id + ' (' + m.link_field + ') could not be read: ' + msg(r.error), lookup2_url: ABOUT } }];\nconst folderId = r.mimeType === 'application/vnd.google-apps.folder' ? r.id : ((r.parents || [])[0] || '');\nif (!folderId) return [{ json: { ...m, move_ok: false, reason: 'Drive file ' + (r.name || m.cand_id) + ' has no parent folder', lookup2_url: ABOUT } }];\nreturn [{ json: { ...m, folder_id: folderId, lookup2_url: 'https://www.googleapis.com/drive/v3/files/' + folderId + '?fields=id,name,mimeType,parents&supportsAllDrives=true' } }];\n"
+      },
+      "id": "95ed2b27-c3bc-43a0-a8e6-469752905d55",
+      "name": "M5. Resolve Folder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11424,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.lookup2_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "8b14a46d-f51b-4810-ad2e-daebbe3246a2",
+      "name": "M6. Drive Get Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        11648,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst h = $('H5. After Update').first().json;\nconst m = $('M5. Resolve Folder').first().json;\nconst r = $input.first().json || {};\nconst ABOUT = 'https://www.googleapis.com/drive/v3/about?fields=kind';\nconst stop = reason => [{ json: { ...m, move_stage: 'check', move_ok: false, reason, find_url: ABOUT } }];\nif (!m.move_ok) return stop(m.reason);\nif (r.error || !r.id) return stop('content folder ' + m.folder_id + ' could not be read: ' + msg(r.error));\nconst name = String(r.name || '');\nconst oldParent = (r.parents || [])[0] || '';\nif (r.id === m.posted_id) return stop('the Drive link points at the Posted folder itself');\nif (!oldParent) return stop('folder \"' + name + '\" sits at the top of the drive; not moved');\nif (name.indexOf(h.src_rec) === -1 && name.indexOf(h.src_rec.slice(0, 7)) === -1) {\n  return stop('folder \"' + name + '\" does not carry record ID ' + h.src_rec + ' in its name, so it may hold other content; not moved');\n}\nconst dt = DateTime.fromISO(h.published_at, { zone: m.tz }).isValid ? DateTime.fromISO(h.published_at, { zone: m.tz }) : DateTime.fromISO(h.published_at, { zone: 'Asia/Manila' });\nconst mon = dt.startOf('week');\nconst sun = mon.plus({ days: 6 });\nconst week = dt.weekYear + '-W' + String(dt.weekNumber).padStart(2, '0') + ' (' + mon.toFormat('LLL d') + ' - ' + sun.toFormat('LLL d') + ')';\nconst q = \"'\" + m.posted_id + \"' in parents and name = '\" + week + \"' and mimeType = 'application/vnd.google-apps.folder' and trashed = false\";\nreturn [{ json: { ...m, move_stage: 'check', move_ok: true, folder_id: r.id, folder_name: name, old_parent: oldParent, week_name: week,\n  find_url: 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)&pageSize=10&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives' } }];\n"
+      },
+      "id": "2789cd30-28d7-4931-b614-588764687db5",
+      "name": "M7. Check Folder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11872,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifCheck-c1",
+              "leftValue": "={{ $json.move_ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "abf26b33-3e74-42e6-a484-3d583c5153b6",
+      "name": "M7b. Folder OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        12096,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.find_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "183fc9ae-a977-4246-9c3a-0f528e54c7db",
+      "name": "M8. Drive Find Week Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        12320,
+        384
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const LOG = { entry:'fldq6KrUxcx5OHQjv', step:'fld3Mm7NZ9wIFLiWb', result:'fldivVeGlqdUUKzEJ', detail:'fldxtKahKB1yoQpsu', at:'fld1IcqfTKH2pG7Rw', post:'fldptSuLBobjarcWG' };\nconst msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst h = $('H5. After Update').first().json;\nconst inp = $input.first().json || {};\nlet ok = false, detail = '';\nif (inp.move_stage) {\n  if (inp.already) { ok = true; detail = 'Folder \"' + inp.folder_name + '\" is already in ' + inp.week_name + '.'; }\n  else detail = 'Content folder was NOT moved to Posted: ' + (inp.reason || 'unknown reason');\n} else {\n  const w = $('M9b. Week Ready').first().json;\n  if (inp.error || !inp.id || !(inp.parents || []).includes(w.week_id)) detail = 'Content folder \"' + w.folder_name + '\" was NOT moved to Posted: ' + msg(inp.error);\n  else { ok = true; detail = 'Folder \"' + w.folder_name + '\" moved to Posted > ' + w.week_name + (w.week_reused ? ' (existing week folder)' : ' (new week folder)') + '.\\nFolder ID ' + w.folder_id + ' is unchanged, so the Drive links on the source record still open it.'; }\n}\nconst fields = {};\nfields[LOG.entry] = 'PUBLISH #' + h.post_number + ' ' + h.brand + ' - Posted folder';\nfields[LOG.step] = ok ? 'Write back' : 'Error';\nfields[LOG.result] = ok ? 'OK' : 'Error';\nfields[LOG.detail] = detail;\nfields[LOG.at] = new Date().toISOString();\nfields[LOG.post] = [h.record_id];\nconst recs = h.log_records.concat([{ fields }]).slice(0, 10);\nreturn [{ json: { log_body: { records: recs, typecast: true }, move_ok: ok, move_detail: detail } }];\n"
+      },
+      "id": "d1eea9d9-4502-4612-8477-706b104016b8",
+      "name": "M11. Move Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13888,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst m = $('M7. Check Folder').first().json;\nconst r = $input.first().json || {};\nif (r.error || !Array.isArray(r.files)) return [{ json: { ...m, move_stage: 'week', move_ok: false, need_create: false, reason: 'Posted folder ' + m.posted_id + ' could not be searched: ' + msg(r.error) } }];\nconst hit = r.files[0];\nreturn [{ json: { ...m, move_stage: 'week', move_ok: true, need_create: !hit, week_id: hit ? hit.id : '', week_reused: !!hit,\n  create_body: { name: m.week_name, mimeType: 'application/vnd.google-apps.folder', parents: [m.posted_id] } } }];\n"
+      },
+      "id": "de44b6d4-b8b5-449d-89a1-15dfeefa92ee",
+      "name": "M8b. Week Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12544,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifCreate-c1",
+              "leftValue": "={{ $json.need_create }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "09065637-a898-4d45-bc4c-c56b8cb7954c",
+      "name": "M8c. Create Week Folder",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        12768,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.create_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "ee8132c7-9c52-445e-b471-b738c77ee6a3",
+      "name": "M9. Drive Create Week Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        12992,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = e => (e ? (typeof e === 'object' ? (e.error_user_msg || e.message || e.type || JSON.stringify(e)) : String(e)) : 'no response');\nconst w = $('M8b. Week Lookup').first().json;\nconst ABOUT = 'https://www.googleapis.com/drive/v3/about?fields=kind';\nif (!w.move_ok) return [{ json: { ...w, move_stage: 'ready', do_patch: false, move_url: ABOUT } }];\nlet weekId = w.week_id;\nif (w.need_create) {\n  const r = $input.first().json || {};\n  if (r.error || !r.id) return [{ json: { ...w, move_stage: 'ready', move_ok: false, do_patch: false, reason: 'week folder \"' + w.week_name + '\" could not be created: ' + msg(r.error), move_url: ABOUT } }];\n  weekId = r.id;\n}\nif (w.old_parent === weekId) return [{ json: { ...w, move_stage: 'ready', week_id: weekId, do_patch: false, already: true, move_url: ABOUT } }];\nreturn [{ json: { ...w, move_stage: 'ready', week_id: weekId, do_patch: true,\n  move_url: 'https://www.googleapis.com/drive/v3/files/' + w.folder_id + '?addParents=' + weekId + '&removeParents=' + w.old_parent + '&supportsAllDrives=true&fields=id,name,parents' } }];\n"
+      },
+      "id": "dcfedb96-ed60-447f-9de2-7b198cd7ee14",
+      "name": "M9b. Week Ready",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13216,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ifPatch-c1",
+              "leftValue": "={{ $json.do_patch }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1fff7b81-333e-459d-8b96-9e974aa7ef54",
+      "name": "M9c. Move Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        13440,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.move_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "ddd898cb-1eff-43c7-8a26-82020831b38d",
+      "name": "M10. Drive Move Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        13664,
+        320
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.fail_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.fail_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "fa4552e0-df72-4bf1-b0f7-73595a096ccf",
+      "name": "S2. Mark Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5152,
+        1040
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Pub Post": {
+      "main": [
+        [
+          {
+            "node": "A1. Build Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A1. Build Queue": {
+      "main": [
+        [
+          {
+            "node": "L. Post Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "A0. Find Overdue Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A0. Find Overdue Posts": {
+      "main": [
+        [
+          {
+            "node": "A1. Build Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B0. Current Post": {
+      "main": [
+        [
+          {
+            "node": "B1. Get Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "L. Post Loop": {
+      "main": [
+        [
+          {
+            "node": "L. All Posts Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "B0. Current Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1. Get Post": {
+      "main": [
+        [
+          {
+            "node": "B2. Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B2. Gate": {
+      "main": [
+        [
+          {
+            "node": "B3. Ready to Go",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B3. Ready to Go": {
+      "main": [
+        [
+          {
+            "node": "W1. Wait Until Scheduled_For",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "S1. Build Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W1. Wait Until Scheduled_For": {
+      "main": [
+        [
+          {
+            "node": "C1. Re-read Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S1. Build Skip": {
+      "main": [
+        [
+          {
+            "node": "S2. Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C1. Re-read Post": {
+      "main": [
+        [
+          {
+            "node": "C2. Recheck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C2. Recheck": {
+      "main": [
+        [
+          {
+            "node": "C3. Still Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C3. Still Ready": {
+      "main": [
+        [
+          {
+            "node": "D1. Load Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "S1. Build Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D1. Load Accounts": {
+      "main": [
+        [
+          {
+            "node": "D2. Load Posts In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D2. Load Posts In Progress": {
+      "main": [
+        [
+          {
+            "node": "D3. Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D3. Plan": {
+      "main": [
+        [
+          {
+            "node": "D4. Account Busy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D4. Account Busy": {
+      "main": [
+        [
+          {
+            "node": "W2. Wait 2 Minutes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "E1. Claim Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2. Wait 2 Minutes": {
+      "main": [
+        [
+          {
+            "node": "E1. Claim Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E1. Claim Post": {
+      "main": [
+        [
+          {
+            "node": "W3. Wait 4 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W3. Wait 4 Seconds": {
+      "main": [
+        [
+          {
+            "node": "E2. Read Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E2. Read Claim": {
+      "main": [
+        [
+          {
+            "node": "E3. Verify Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E3. Verify Claim": {
+      "main": [
+        [
+          {
+            "node": "E4. Claim Is Mine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E4. Claim Is Mine": {
+      "main": [
+        [
+          {
+            "node": "F1. IG Prep",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "S1. Build Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F1. IG Prep": {
+      "main": [
+        [
+          {
+            "node": "F2. Post to Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F2. Post to Instagram": {
+      "main": [
+        [
+          {
+            "node": "G1. IG Check Limit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "R. IG Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G1. IG Check Limit": {
+      "main": [
+        [
+          {
+            "node": "G2. IG Build Containers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R. IG Result": {
+      "main": [
+        [
+          {
+            "node": "H1. Get Post Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2. IG Build Containers": {
+      "main": [
+        [
+          {
+            "node": "G2b. Containers Planned",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2b. Containers Planned": {
+      "main": [
+        [
+          {
+            "node": "G3. IG Create Container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "R. IG Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G3. IG Create Container": {
+      "main": [
+        [
+          {
+            "node": "G4. IG Collect Containers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G4. IG Collect Containers": {
+      "main": [
+        [
+          {
+            "node": "G4b. Needs Carousel Parent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G4b. Needs Carousel Parent": {
+      "main": [
+        [
+          {
+            "node": "G5. IG Create Carousel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "G6. IG Container Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G5. IG Create Carousel": {
+      "main": [
+        [
+          {
+            "node": "G6. IG Container Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G6. IG Container Ready": {
+      "main": [
+        [
+          {
+            "node": "G6b. Container OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G6b. Container OK": {
+      "main": [
+        [
+          {
+            "node": "G7. Save Container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "R. IG Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G7. Save Container": {
+      "main": [
+        [
+          {
+            "node": "P1. Poll State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P1. Poll State": {
+      "main": [
+        [
+          {
+            "node": "P2. IG Container Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P2. IG Container Status": {
+      "main": [
+        [
+          {
+            "node": "P3. Poll Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P3. Poll Check": {
+      "main": [
+        [
+          {
+            "node": "P4. Poll Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "P4. Poll Result": {
+      "main": [
+        [
+          {
+            "node": "W4. Wait 20 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q1. IG Publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "R. IG Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W4. Wait 20 Seconds": {
+      "main": [
+        [
+          {
+            "node": "P1. Poll State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q1. IG Publish": {
+      "main": [
+        [
+          {
+            "node": "Q2. IG Get Permalink",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q2. IG Get Permalink": {
+      "main": [
+        [
+          {
+            "node": "R. IG Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H1. Get Post Final": {
+      "main": [
+        [
+          {
+            "node": "H2. Build Final Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H2. Build Final Update": {
+      "main": [
+        [
+          {
+            "node": "H3. Update Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H3. Update Post": {
+      "main": [
+        [
+          {
+            "node": "H4. Update Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H4. Update Source": {
+      "main": [
+        [
+          {
+            "node": "H5. After Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H5. After Update": {
+      "main": [
+        [
+          {
+            "node": "H6. File Folder to Posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H6. File Folder to Posted": {
+      "main": [
+        [
+          {
+            "node": "M1. Get Source Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Z1. Write Publish Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M1. Get Source Record": {
+      "main": [
+        [
+          {
+            "node": "M2. Get Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Z1. Write Publish Log": {
+      "main": [
+        [
+          {
+            "node": "L. Post Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M2. Get Client": {
+      "main": [
+        [
+          {
+            "node": "M3. Pick Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M3. Pick Folder": {
+      "main": [
+        [
+          {
+            "node": "M4. Drive Get Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M4. Drive Get Item": {
+      "main": [
+        [
+          {
+            "node": "M5. Resolve Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M5. Resolve Folder": {
+      "main": [
+        [
+          {
+            "node": "M6. Drive Get Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M6. Drive Get Folder": {
+      "main": [
+        [
+          {
+            "node": "M7. Check Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M7. Check Folder": {
+      "main": [
+        [
+          {
+            "node": "M7b. Folder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M7b. Folder OK": {
+      "main": [
+        [
+          {
+            "node": "M8. Drive Find Week Folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M11. Move Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M8. Drive Find Week Folder": {
+      "main": [
+        [
+          {
+            "node": "M8b. Week Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M11. Move Result": {
+      "main": [
+        [
+          {
+            "node": "Z1. Write Publish Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M8b. Week Lookup": {
+      "main": [
+        [
+          {
+            "node": "M8c. Create Week Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M8c. Create Week Folder": {
+      "main": [
+        [
+          {
+            "node": "M9. Drive Create Week Folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M9b. Week Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M9. Drive Create Week Folder": {
+      "main": [
+        [
+          {
+            "node": "M9b. Week Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M9b. Week Ready": {
+      "main": [
+        [
+          {
+            "node": "M9c. Move Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M9c. Move Needed": {
+      "main": [
+        [
+          {
+            "node": "M10. Drive Move Folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M11. Move Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M10. Drive Move Folder": {
+      "main": [
+        [
+          {
+            "node": "M11. Move Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S2. Mark Failed": {
+      "main": [
+        [
+          {
+            "node": "Z1. Write Publish Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timezone": "Asia/Manila",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 3600
+  },
+  "versionId": "4f5f0b85-ffdc-4505-8cd4-247b1cf451c0",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "NnLV7XiXD6Tj6VP7",
+  "tags": []
+}

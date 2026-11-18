@@ -1,0 +1,685 @@
+{
+  "name": "WF00- Video Library Field Filler (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblWBISPAy99YtoPw",
+          "mode": "id"
+        },
+        "filterByFormula": "AND(\n  {Platform} = 'YouTube',\n  OR(\n    {View Count} = '',\n    {Like Count} = '',\n    {Comment Count} = '',\n    {Creator_Handle} = '',\n    {Duration} = ''\n  )\n)\n",
+        "returnAll": "={{ true }}",
+        "options": {}
+      },
+      "id": "e6e5d3ba-a6db-43de-8659-5a31d7e03ad4",
+      "name": "1. Get All Video Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        352
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "a866c61f-4afc-446c-bece-7d86f07f2c03",
+      "name": "2. Pass Through",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id={{ $input.all().map(i => i.json['Video ID']).join(',') }}&key=AIzaSyCiu4jOmy7kvNLMU9KAFcHhIW8ZVfB4OkQ",
+        "options": {}
+      },
+      "id": "80c19a43-a0b5-44e3-8f2b-4bfc0f634129",
+      "name": "4. Fetch YouTube Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        624,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ytResponse = $input.all()[0].json;\nconst ytItems = ytResponse.items || [];\nconst batchRecords = $('3. Batch of 5').all();\n\nconst ytMap = {};\nfor (const yt of ytItems) ytMap[yt.id] = yt;\n\nconst results = [];\n\nfor (const record of batchRecords) {\n  const existing = record.json;\n  const videoId  = existing['Video ID'];\n  const yt       = ytMap[videoId];\n\n  const fieldsToUpdate = {};\n\n  if (yt) {\n    const dur = yt.contentDetails?.duration || 'PT0S';\n    let s = 0;\n    const m = dur.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/);\n    if (m) s = (parseInt(m[1]||0)*3600)+(parseInt(m[2]||0)*60)+parseInt(m[3]||0);\n    const ct    = s <= 60 ? 'Short' : 'Video';\n    const ytUrl = ct === 'Short'\n      ? `https://www.youtube.com/shorts/${videoId}`\n      : `https://www.youtube.com/watch?v=${videoId}`;\n    const ytTags      = Array.isArray(yt.snippet?.tags) ? yt.snippet.tags.join(', ') : '';\n    const ytTitle     = yt.snippet?.title        || '';\n    const ytChannelId = yt.snippet?.channelId    || '';\n    const ytDesc      = yt.snippet?.description  || '';\n    const ytPublished = yt.snippet?.publishedAt  || '';\n    const ytViews     = parseInt(yt.statistics?.viewCount    || 0);\n    const ytLikes     = parseInt(yt.statistics?.likeCount    || 0);\n    const ytComments  = parseInt(yt.statistics?.commentCount || 0);\n\n    if (!existing['Title']        && ytTitle)      fieldsToUpdate['Title']        = ytTitle;\n    if (!existing['URL'])                           fieldsToUpdate['URL']          = ytUrl;\n    if (!existing['Channel ID']   && ytChannelId)  fieldsToUpdate['Channel ID']   = ytChannelId;\n    if (!existing['Description']  && ytDesc)       fieldsToUpdate['Description']  = ytDesc;\n    if (!existing['Tags']         && ytTags)       fieldsToUpdate['Tags']         = ytTags;\n    if (!existing['Published At'] && ytPublished)  fieldsToUpdate['Published At'] = ytPublished;\n    if (!existing['Duration'])                      fieldsToUpdate['Duration']     = s;\n    if (!existing['Content Type'])                  fieldsToUpdate['Content Type'] = ct;\n    if (!existing['Platform'])                      fieldsToUpdate['Platform']     = 'YouTube';\n\n    if (ytViews    !== (existing['View Count']    || 0)) fieldsToUpdate['View Count']    = ytViews;\n    if (ytLikes    !== (existing['Like Count']    || 0)) fieldsToUpdate['Like Count']    = ytLikes;\n    if (ytComments !== (existing['Comment Count'] || 0)) fieldsToUpdate['Comment Count'] = ytComments;\n  }\n\n  results.push({\n    json: {\n      airtable_record_id:      existing.id,\n      existing_channel_id:     existing['Channel ID'] || '',\n      existing_source_name:    existing['Source Name'] || '',\n      existing_assoc:          existing['Associated_Sources'] || [],\n      existing_creator_handle: existing['Creator_Handle'] || '',\n      existing_platform:       existing['Platform'] || 'YouTube',\n      fieldsToUpdate\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "id": "42a29cf5-2031-4e53-8120-53d81b89d129",
+      "name": "5. Parse Missing Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "b5275ec1-5cc0-47a6-b598-0584db9da639",
+      "name": "6. Wait 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        352
+      ],
+      "webhookId": "filler-wait"
+    },
+    {
+      "parameters": {},
+      "id": "b97d844a-2cb0-4b40-a7a6-74b310d40718",
+      "name": "8. All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        624,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceRadarItems = $('2b. Get Source Radar').all();\n\n// Build lookup maps keyed by Channel ID and Source Name\n// Include all handle fields from Source Radar\nconst channelIdToSource   = {};\nconst channelNameToSource = {};\nfor (const src of sourceRadarItems) {\n  const chId    = src.json['YouTube Channel ID'] || '';\n  const srcName = src.json['Source Name'] || '';\n  const recId   = src.json.id;\n\n  // Get handle for each platform\n  const ytLinks  = src.json['YouTube_Links'] || '';\n  const igHandle = src.json['Instagram_Handle'] || '';\n  const ttHandle = src.json['TikTok_Handle'] || '';\n\n  // Extract @handle from YouTube_Links (e.g. youtube.com/@nicksaraev → @nicksaraev)\n  const ytHandleMatch = ytLinks.match(/(@[A-Za-z0-9_.-]+)/);\n  const ytHandle = ytHandleMatch ? ytHandleMatch[1] : '';\n\n  const srcObj = { id: recId, name: srcName, ytHandle, igHandle, ttHandle };\n  if (chId)    channelIdToSource[chId]                    = srcObj;\n  if (srcName) channelNameToSource[srcName.toLowerCase()] = srcObj;\n}\n\nconst videoItems = $('5. Parse Missing Fields').all();\nconst results = [];\n\nfor (const item of videoItems) {\n  const v = item.json;\n  const fieldsToUpdate = { ...v.fieldsToUpdate };\n\n  const channelId  = fieldsToUpdate['Channel ID'] || v.existing_channel_id || '';\n  const sourceName = v.existing_source_name || '';\n  const platform   = fieldsToUpdate['Platform'] || v.existing_platform || 'YouTube';\n\n  const match = channelIdToSource[channelId]\n    || channelNameToSource[sourceName.toLowerCase()]\n    || null;\n\n  // Source Name — fill if missing\n  if (!v.existing_source_name && match) {\n    fieldsToUpdate['Source Name'] = match.name;\n  }\n\n  // Associated_Sources — fill if missing\n  const hasAssoc = Array.isArray(v.existing_assoc) && v.existing_assoc.length > 0;\n  if (!hasAssoc && match) {\n    fieldsToUpdate['Associated_Sources'] = [match.id];\n  }\n\n  // Creator_Handle — fill if missing, pick correct handle by platform\n  if (!v.existing_creator_handle && match) {\n    let handle = '';\n    if (platform === 'Instagram') {\n      handle = match.igHandle;\n    } else if (platform === 'TikTok') {\n      handle = match.ttHandle;\n    } else {\n      // YouTube — use extracted @handle from YouTube_Links\n      handle = match.ytHandle;\n    }\n    if (handle) fieldsToUpdate['Creator_Handle'] = handle;\n  }\n\n  results.push({\n    json: {\n      id: v.airtable_record_id,\n      ...fieldsToUpdate\n    }\n  });\n}\n\nconst toUpdate = results.filter(r => Object.keys(r.json).length > 1).length;\nconsole.log(`Total: ${results.length} | Actually updating: ${toUpdate} | Passing through: ${results.length - toUpdate}`);\nreturn results;\n"
+      },
+      "id": "12c7a66c-e054-40fc-8b85-17385a7c9a44",
+      "name": "5c. Attach Source ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblWBISPAy99YtoPw",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "View Count": 0,
+            "Like Count": 0,
+            "Comment Count": 0,
+            "Outlier Score": 0,
+            "Duration": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Video ID",
+              "displayName": "Video ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "URL",
+              "displayName": "URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "New",
+                  "value": "New"
+                },
+                {
+                  "name": "Promoted",
+                  "value": "Promoted"
+                },
+                {
+                  "name": "Archived",
+                  "value": "Archived"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Content Type",
+              "displayName": "Content Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Post",
+                  "value": "Post"
+                },
+                {
+                  "name": "Reel",
+                  "value": "Reel"
+                },
+                {
+                  "name": "Short",
+                  "value": "Short"
+                },
+                {
+                  "name": "TikTok",
+                  "value": "TikTok"
+                },
+                {
+                  "name": "Video",
+                  "value": "Video"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "View Count",
+              "displayName": "View Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Like Count",
+              "displayName": "Like Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Comment Count",
+              "displayName": "Comment Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Outlier Score",
+              "displayName": "Outlier Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Associated_Sources",
+              "displayName": "Associated_Sources",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Creator_Handle",
+              "displayName": "Creator_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source Name",
+              "displayName": "Source Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Tags",
+              "displayName": "Tags",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Published At",
+              "displayName": "Published At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "YouTube",
+                  "value": "YouTube"
+                },
+                {
+                  "name": "Instagram",
+                  "value": "Instagram"
+                },
+                {
+                  "name": "TikTok",
+                  "value": "TikTok"
+                },
+                {
+                  "name": "LinkedIn",
+                  "value": "LinkedIn"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Duration",
+              "displayName": "Duration",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Last Modified Time",
+              "displayName": "Last Modified Time",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Created Time",
+              "displayName": "Created Time",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Channel ID",
+              "displayName": "Channel ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "6e602411-aac5-4fe0-a72a-f382f457d9ec",
+      "name": "7. Update Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        432
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "filterByFormula": "NOT({YouTube Channel ID} = '')",
+        "options": {}
+      },
+      "id": "1ba538a0-08a8-4bf0-9ca1-0d37dd4385db",
+      "name": "2b. Get Source Radar",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        352
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 2b has now run and is safe to read from in 5c\n// Pass through the original video records from Node 1 into the batch loop\nreturn $('1. Get All Video Records').all();"
+      },
+      "id": "bb821256-72e1-403a-86fe-9968324f57d1",
+      "name": "2c. Pass Video Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "e8aec09f-8011-4b80-9e23-d765b31016be",
+      "name": "Every 24 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -720,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "id": "b61f4429-024a-4b9b-85b9-3d99ca212a4f",
+      "name": "3. Batch of 5",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        400,
+        352
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "1. Get All Video Records": {
+      "main": [
+        [
+          {
+            "node": "2. Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Pass Through": {
+      "main": [
+        [
+          {
+            "node": "2b. Get Source Radar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Fetch YouTube Metadata": {
+      "main": [
+        [
+          {
+            "node": "5. Parse Missing Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Parse Missing Fields": {
+      "main": [
+        [
+          {
+            "node": "5c. Attach Source ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Wait 3s": {
+      "main": [
+        [
+          {
+            "node": "7. Update Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5c. Attach Source ID": {
+      "main": [
+        [
+          {
+            "node": "6. Wait 3s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Update Records": {
+      "main": [
+        [
+          {
+            "node": "3. Batch of 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Get Source Radar": {
+      "main": [
+        [
+          {
+            "node": "2c. Pass Video Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Pass Video Records": {
+      "main": [
+        [
+          {
+            "node": "3. Batch of 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 24 Hours": {
+      "main": [
+        [
+          {
+            "node": "1. Get All Video Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Batch of 5": {
+      "main": [
+        [
+          {
+            "node": "8. All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4. Fetch YouTube Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "3f17508c-a1d2-407d-804f-2ea26d6ca03b",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "5dmbN1BhEXrCMRPu",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}

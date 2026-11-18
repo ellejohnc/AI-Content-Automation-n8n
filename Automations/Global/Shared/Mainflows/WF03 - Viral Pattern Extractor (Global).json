@@ -1,0 +1,837 @@
+{
+  "name": "WF03 - Viral Pattern Extractor (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "a9c063c2-7f49-4947-95a0-c6a2918a1eb3",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        992,
+        1968
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8f0c1d4f-9f8b-48bd-b2aa-f9d2c4565f93",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        992,
+        1776
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "filterByFormula": "AND({Processed} = FALSE(), NOT({URL} = ''))",
+        "options": {}
+      },
+      "id": "dd7bcb51-7ec8-4411-967c-34b5144c593a",
+      "name": "1. Get Unprocessed Viral Videos",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        1600
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "3321d3b6-5fb9-4129-b5fd-dff9574df335",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2336,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\nconst cfg = item.cfg || {};\nconst url = item['URL'] || '';\nconst recordId = item.id || '';\nconst existingTranscript = item['Transcript'] || '';\nconst creatorHandle = item['Creator_Handle'] || '';\n\nlet platform = (item['Platform'] || '').toLowerCase();\nif (!platform) {\n  if (url.includes('tiktok.com')) platform = 'tiktok';\n  else if (url.includes('instagram.com')) platform = 'instagram';\n  else platform = 'youtube';\n}\n\nlet videoId = '';\nif (url.includes('v='))             videoId = url.split('v=')[1].split('&')[0];\nelse if (url.includes('shorts/'))   videoId = url.split('shorts/')[1].split('?')[0];\nelse if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];\n\nreturn { json: {\n  cfg,\n  record_id:           recordId,\n  url:                 url,\n  video_id:            videoId,\n  platform:            platform,\n  creator_handle:      creatorHandle,\n  existing_transcript: existingTranscript\n} };"
+      },
+      "name": "2. Extract Video ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        1600
+      ],
+      "id": "73a5e173-64f1-4402-8ae6-1ecb497c1db1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1d1a1b1-1234-4567-89ab-cdef01234567",
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "youtube",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "3. Is YouTube?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2784,
+        1600
+      ],
+      "id": "abbfc901-2277-4ab5-8f92-d275a0261ef9"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.supadata.ai/v1/youtube/transcript?videoId={{ encodeURIComponent($json.video_id) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "3a. YouTube Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3008,
+        1504
+      ],
+      "id": "5f4b72b3-04d4-4c97-b000-91f2c9119ac9",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L01j4MGWxdfH53sL",
+          "name": "SUPADATA"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.supadata.ai/v1/transcript?url={{ encodeURIComponent($json.url) }}&text=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "3b. Universal Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3008,
+        1776
+      ],
+      "id": "cd2f6bd2-2e96-4eaf-b6c4-c4dc7cebfa1a",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L01j4MGWxdfH53sL",
+          "name": "SUPADATA"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\nconst originalData = $('2. Extract Video ID').item.json;\n\nlet transcript = 'TRANSCRIPT_UNAVAILABLE';\nlet isRateLimited = false;\n\nconst extractText = (content) => {\n  if (!content) return null;\n  if (typeof content === 'string') return content.trim();\n  if (Array.isArray(content)) return content.map(c => c.text || c.content || '').join(' ').trim();\n  return null;\n};\n\n// Supadata returns errors as both plain objects AND array-wrapped objects.\nconst body = Array.isArray(response) ? response[0] : response;\nconst statusCode = body.statusCode || body.status || 0;\nconst errorCode  = (body.error || '').toLowerCase();\n\nif (errorCode) {\n  if (errorCode === 'limit-exceeded' || errorCode === 'rate-limit' || errorCode === 'rate_limit' || errorCode === 'too-many-requests' || errorCode === 'quota-exceeded' || statusCode === 429) {\n    console.log('[WF03] Supadata limit/rate error:', body.error, body.message);\n    isRateLimited = true;\n    transcript = 'TRANSCRIPT_RATE_LIMITED';\n  } else if (statusCode === 401 || statusCode === 403) {\n    transcript = 'TRANSCRIPT_AUTH_ERROR';\n  } else {\n    transcript = 'TRANSCRIPT_UNAVAILABLE';\n  }\n} else if (statusCode >= 400) {\n  if (statusCode === 429) { isRateLimited = true; transcript = 'TRANSCRIPT_RATE_LIMITED'; }\n  else if (statusCode === 401 || statusCode === 403) { transcript = 'TRANSCRIPT_AUTH_ERROR'; }\n  else { transcript = 'TRANSCRIPT_UNAVAILABLE'; }\n} else {\n  const immediateContent = body.content || (body.data && body.data.content) || (body.result && body.result.content) || null;\n  if (immediateContent) {\n    const text = extractText(immediateContent);\n    if (text) transcript = text;\n  }\n}\n\nconst isUnavailable = !transcript || transcript === 'TRANSCRIPT_UNAVAILABLE' || transcript === 'TRANSCRIPT_AUTH_ERROR';\n\nreturn { json: {\n  cfg:                 originalData.cfg || {},\n  transcript:          transcript,\n  record_id:           originalData.record_id || '',\n  creator_handle:      originalData.creator_handle || '',\n  url:                 originalData.url || '',\n  platform:            originalData.platform || '',\n  existing_transcript: originalData.existing_transcript || '',\n  has_transcript:      !isUnavailable && !isRateLimited,\n  rate_limited:        isRateLimited\n} };"
+      },
+      "name": "4. Standardize Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3232,
+        1600
+      ],
+      "id": "9fd3a2e5-9639-4d14-bb9a-2e5e08fe3697"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "transcript-check",
+              "leftValue": "={{ $json.has_transcript }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "4b. Has Transcript?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3456,
+        1600
+      ],
+      "id": "c1c42a1e-92b8-4e5f-8267-b54b8285d5f1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "rate-limit-check",
+              "leftValue": "={{ $json.rate_limited }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "4c. Rate Limited?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3904,
+        1696
+      ],
+      "id": "4458cf72-edf6-467a-9988-40dc624fa708"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4.1-mini\",\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You are an expert viral content analyst. Extract the viral pattern from a transcript. Always respond in this exact format with no extra text:\\n\\nHOOK_TYPE: [one short label e.g. Curiosity Gap, Bold Claim, Story Open, Question, Stat/Fact, Transformation, Controversy]\\nSTRUCTURE_TAG: [one short label e.g. Problem-Solution, List-Based, Tutorial, Story-Arc, News-React, Before-After]\\nPATTERN: [full reusable pattern e.g. Hook > Problem > 3 Examples > Insight > CTA]\" },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify(\"Analyze this transcript and extract the viral pattern.\\n\\nTRANSCRIPT:\\n\" + $json.transcript) }}\n    }\n  ],\n  \"max_tokens\": 300,\n  \"temperature\": 0.3\n}",
+        "options": {}
+      },
+      "name": "5. Analyze Pattern (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3680,
+        1456
+      ],
+      "id": "e96be6b5-ee0f-4114-a20a-d17192e1229a",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "x9t1HtZVkPLKi1dp",
+          "name": "OpenAI Bearer Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\nconst transcriptData = $('4. Standardize Transcript').item.json;\n\nlet content = '';\ntry {\n  if (response && response.choices && response.choices[0] && response.choices[0].message && response.choices[0].message.content) {\n    content = response.choices[0].message.content;\n  } else {\n    console.log('[WF03] Unexpected OpenAI response structure');\n    content = 'PATTERN_ANALYSIS_FAILED';\n  }\n} catch (e) {\n  console.log('[WF03] Error parsing OpenAI response:', e.message);\n  content = 'PATTERN_ANALYSIS_FAILED';\n}\n\nconst hookMatch      = content.match(/HOOK_TYPE:\\s*(.+)/i);\nconst structureMatch = content.match(/STRUCTURE_TAG:\\s*(.+)/i);\nconst patternMatch   = content.match(/PATTERN:\\s*(.+)/i);\n\nreturn { json: {\n  cfg:              transcriptData.cfg || {},\n  record_id:        transcriptData.record_id,\n  transcript:       transcriptData.transcript,\n  creator_handle:   transcriptData.creator_handle || '',\n  hook_type:        hookMatch      ? hookMatch[1].trim().substring(0,100)      : 'Unknown',\n  structure_tag:    structureMatch ? structureMatch[1].trim().substring(0,100) : 'Unknown',\n  reusable_pattern: patternMatch   ? patternMatch[1].trim().substring(0,900)   : content.trim().substring(0,900)\n} };"
+      },
+      "name": "5b. Parse Pattern Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3904,
+        1456
+      ],
+      "id": "788f4f74-b1fe-4e2a-ac96-aaada2d1d21d"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Creator_Handle": "={{ $json.creator_handle || '' }}",
+            "Hook Type": "={{ $json.hook_type }}",
+            "Processed": true,
+            "Reusable_Pattern": "={{ $json.reusable_pattern }}",
+            "Structure_Tag": "={{ $json.structure_tag }}",
+            "Transcript": "={{ String($json.transcript || '').substring(0, 99000) }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "6. Update Viral Library",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        1456
+      ],
+      "id": "2201d5a8-558b-4506-b445-eedbfa3d9de0",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Creator_Handle": "={{ $json.creator_handle || '' }}",
+            "Hook Type": "N/A",
+            "Processed": true,
+            "Reusable_Pattern": "N/A — no transcript available",
+            "Structure_Tag": "N/A",
+            "Transcript": "TRANSCRIPT_UNAVAILABLE",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "6b. Mark No Transcript",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        1776
+      ],
+      "id": "48228d5b-7767-483e-a9fb-adee95792c0f",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "ad93964e-1085-4d13-ac4d-24e28b25acc9",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1216,
+        1872
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  out.push({ json: { client_name: name, video_base_id: c['Video_Base_ID'] } });\n}\nreturn out;"
+      },
+      "id": "ac86ad67-54c3-42a3-9e2f-7a1b57286485",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        1872
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ec99e862-83c2-4c75-9ae7-60839b7e5a55",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1664,
+        1872
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "d532fe39-56da-4d9a-85ee-43a6143ad6ec",
+      "name": "1c. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        1600
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "93c81bb0-c24f-475a-833e-747716f7a58b",
+      "name": "7. Pattern Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4352,
+        1696
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8e4653d2-a6b0-4c1f-be02-76f914a97666",
+      "name": "8. All Clients Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        1872
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2. Extract Video ID": {
+      "main": [
+        [
+          {
+            "node": "3. Is YouTube?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Is YouTube?": {
+      "main": [
+        [
+          {
+            "node": "3a. YouTube Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "3b. Universal Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3a. YouTube Transcript": {
+      "main": [
+        [
+          {
+            "node": "4. Standardize Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Universal Transcript": {
+      "main": [
+        [
+          {
+            "node": "4. Standardize Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Standardize Transcript": {
+      "main": [
+        [
+          {
+            "node": "4b. Has Transcript?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. Has Transcript?": {
+      "main": [
+        [
+          {
+            "node": "5. Analyze Pattern (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4c. Rate Limited?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. Rate Limited?": {
+      "main": [
+        [
+          {
+            "node": "7. Pattern Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6b. Mark No Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Analyze Pattern (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "5b. Parse Pattern Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Parse Pattern Response": {
+      "main": [
+        [
+          {
+            "node": "6. Update Viral Library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "8. All Clients Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Unprocessed Viral Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Unprocessed Viral Videos": {
+      "main": [
+        [
+          {
+            "node": "1c. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "2. Extract Video ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Update Viral Library": {
+      "main": [
+        [
+          {
+            "node": "7. Pattern Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Mark No Transcript": {
+      "main": [
+        [
+          {
+            "node": "7. Pattern Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Pattern Done": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "45b9bef4-d46f-423c-86c2-3af6376ff34a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "mdMYj5Ntwp9WfVCv",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

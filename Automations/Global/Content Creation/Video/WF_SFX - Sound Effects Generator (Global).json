@@ -1,0 +1,897 @@
+{
+  "name": "WF_SFX - Sound Effects Generator (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "04c0c75b-9345-414e-94e2-92d3ed683143",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        -544
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "97501cb5-6fef-4593-99c8-f1f8fd06caeb",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        -736
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "AND({Sound_Effects} != '', {Sound_Effects_URL} = '')",
+        "options": {}
+      },
+      "id": "f4b9d3ba-fad0-448a-ac21-f3f7299434ed",
+      "name": "1. Get Records Needing SFX",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4240,
+        -976
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "1999df1c-723a-47e0-ad6b-9308d932ffc8",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4688,
+        -976
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const record = $input.item.json;\nconst cfg = record.cfg || {};\nconst s = cfg.sfx || {};\nconst recordId = record.id || '';\nconst sfxRaw = record['Sound_Effects'] || '';\n\nconst KNOWN_SOUNDS = s.known_sounds || ['digital_readout','whoosh','impact','riser','ding','air_hit','keyboard','mouse_click','double_click','notification','camera_shutter','digital_shutter'];\nconst EXT = s.file_extension || '.wav';\n\nconst lines = sfxRaw.split('\\n').filter(l => l.trim().length > 0);\nconst sounds = [];\n\nfor (const line of lines) {\n  const stripped = line.replace(/^\\d+\\.\\s*/, '').trim();\n  let soundName = '';\n  let cue = '';\n\n  const atMatch = stripped.match(/^([a-z_]+)\\s+at\\s+([\\d:]+)/i);\n  if (atMatch) {\n    soundName = atMatch[1].toLowerCase();\n    cue = atMatch[2];\n  } else {\n    soundName = (stripped.split(/[\\s|\\u2014\\-]/)[0] || '').toLowerCase().replace(/[^a-z_]/g, '');\n  }\n\n  if (!soundName || KNOWN_SOUNDS.indexOf(soundName) === -1) continue;\n  sounds.push({ soundName, cue, filename: soundName + EXT, index: sounds.length + 1 });\n}\n\nreturn { json: { cfg, record_id: recordId, sounds } };"
+      },
+      "id": "df693208-35fb-473a-973a-42afba06c6c3",
+      "name": "2. Parse Sound Effects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4912,
+        -976
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sounds-check",
+              "leftValue": "={{ $json.sounds.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "005a6f9a-3ee8-44ff-be67-d4180696ce3c",
+      "name": "3. Has Sounds?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5136,
+        -976
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const data = $input.item.json;\nconst cfg = data.cfg || {};\nconst s = cfg.sfx || {};\nconst folderId = s.drive_folder_id || cfg.drive_folder_id || '';\n\nconst nameConditions = data.sounds.map(x => `name = '${x.filename}'`).join(' or ');\nconst driveQuery = `(${nameConditions}) and '${folderId}' in parents and trashed = false`;\n\nreturn { json: { cfg, record_id: data.record_id, sounds: data.sounds, drive_folder_id: folderId, page_size: String(s.page_size || 20), driveQuery } };"
+      },
+      "id": "38f8e9d6-958d-4c39-a987-f4c2b9b87484",
+      "name": "4. Build Batch Drive Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5360,
+        -976
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.driveQuery }}"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            },
+            {
+              "name": "pageSize",
+              "value": "={{ $json.page_size }}"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "corpora",
+              "value": "allDrives"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b6e74cba-b151-4d82-8648-1d4737094927",
+      "name": "5. Search Drive (All Files at Once)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5584,
+        -976
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MiXOLRTKPKVCXey",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const driveResult = $input.item.json;\nconst ctx = $('4. Build Batch Drive Query').item.json;\n\nconst fileMap = {};\nfor (const f of (driveResult.files || [])) {\n  fileMap[f.name] = f.id;\n}\n\nconst urlLines = ctx.sounds.map((s, i) => {\n  const fileId = fileMap[s.filename] || '';\n  const url = fileId ? `https://drive.google.com/uc?export=download&id=${fileId}` : 'NOT_FOUND';\n  const cue = s.cue ? ` at ${s.cue}` : '';\n  return `${i + 1}. ${s.soundName}${cue}: ${url}`;\n}).join('\\n');\n\nreturn { json: { cfg: ctx.cfg, record_id: ctx.record_id, sound_effects_url: urlLines } };"
+      },
+      "id": "fa2b5f09-fc1d-420b-b543-df57ca8d2876",
+      "name": "6. Map Files to URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5808,
+        -976
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Sound_Effects_URL": "={{ $json.sound_effects_url }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "e5ed8bf3-6abe-49ad-86f6-5f5bfd1d4c0d",
+      "name": "7. Write Sound_Effects_URL to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        6032,
+        -800
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "897bf2a3-e095-44b1-89fb-5d593393317f",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        3344,
+        -640
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Enabled}",
+        "options": {}
+      },
+      "id": "c27cf2bf-1d1b-4b55-90cb-433d7bbc9654",
+      "name": "0a2. Load Client Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        3568,
+        -640
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'sfx';\n\nfunction parseJson(raw, label) {\n  if (!raw) return {};\n  try {\n    const v = JSON.parse(raw);\n    if (v && typeof v === 'object' && !Array.isArray(v)) return v;\n    return {};\n  } catch (e) { console.log('[0b] Invalid Config_JSON on ' + label + ': ' + e.message); return {}; }\n}\n\nconst outputs = $input.all().map(i => i.json);\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outByKey = {};\nfor (const o of outputs) {\n  const key = (o['Key'] || '').trim().toLowerCase();\n  if (key) outByKey[key] = o;\n}\n\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  const o = outByKey[(name + '::' + OUTPUT_TYPE).toLowerCase()] || null;\n  const merged = { ...parseJson(c['Config_JSON'], name), ...parseJson(o ? o['Config_JSON'] : '', name + '::' + OUTPUT_TYPE) };\n  out.push({ json: {\n    ...merged,\n    client_name: name,\n    video_base_id: c['Video_Base_ID'],\n    brand_name: c['Brand_Name'] || name,\n    output_type: OUTPUT_TYPE,\n    drive_shared_drive_id: c['Drive_Shared_Drive_ID'] || '',\n    drive_folder_id: o ? (o['Drive_Folder_ID'] || '') : ''\n  } });\n}\nconsole.log('[0b] Clients to process: ' + out.length);\nreturn out;"
+      },
+      "id": "3868a334-31b6-446c-a97a-e55832a21707",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3792,
+        -640
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "32f2c96f-646a-48dd-b0d6-18d2ef9cc4c8",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4016,
+        -640
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "731e5ab2-837e-4788-900b-446d1e7a8b20",
+      "name": "0d. All Clients Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4240,
+        -784
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "3a4830c9-1bc8-4abc-8953-c53fb804961e",
+      "name": "1z. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4464,
+        -976
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "e8383f59-67e4-4cd3-b05e-59db5f98f702",
+      "name": "0e. Loop Return",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        4128,
+        -592
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved-check",
+              "leftValue": "={{ $json._route === 'run' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "f0927ee5-849a-4b72-b34c-b34dd1dbea78",
+      "name": "1e. Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4912,
+        -1216
+      ],
+      "notes": "T-44: Production_Approval ticked AND Script_Approval = Approved, or nothing runs."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "note-check",
+              "leftValue": "={{ $json._route === 'note' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "75aa4b00-3127-4db2-9802-001d74de041c",
+      "name": "1f. Needs Note?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5136,
+        -1216
+      ],
+      "notes": "T-44: true when the SFX block does not yet say 'Not approved: skipped'. Keeps the note to one write."
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "8c7fb162-b407-4977-b644-1f103efb3032",
+      "name": "1g. Re-read Notes (Not Approved)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        5360,
+        -1216
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// T-44: record is not approved. Rewrite only this workflow's notes block.\nconst fresh = $input.item.json || {};\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst sep = '==============================';\nconst TAG = 'SFX (WF_SFX)';\nconst notes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst base = notes.replace(re, '').trim();\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst block = sep + '\\n' + TAG + '\\nUpdated: ' + stamp + '\\nStage: Skipped' + '\\nNot approved: skipped';\nreturn { json: { record_id: fresh.id || '', reel_notes_final: (base ? base + '\\n\\n' : '') + block } };"
+      },
+      "id": "e8c2e58c-4625-4efa-99a4-7f636ced1837",
+      "name": "1h. Build Skip Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5584,
+        -1216
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "f546cef1-a079-43e4-99d1-eaa6f1aa7789",
+      "name": "1i. Write Not Approved Note",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        5808,
+        -1216
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-44: continue only when Production_Approval is ticked AND Script_Approval = Approved.\n// WF_SFX is field-triggered (no trigger status), so an unapproved record is noted once and then ignored.\nconst items = $input.all();\nconst cfg = (items[0] && items[0].json.cfg) || {};\nconst sep = '==============================';\nconst TAG = 'SFX (WF_SFX)';\nconst LINE = 'Not approved: skipped';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst re = new RegExp(esc(sep) + '\\\\n' + esc(TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)');\nconst isOk = j => { const sa = j.Script_Approval; const v = (sa && typeof sa === 'object') ? sa.name : sa; return j.Production_Approval === true && v === 'Approved'; };\nconst noted = j => { const m = String(j.Reel_Notes || '').match(re); return !!(m && m[0].includes(LINE)); };\nconst ok = items.filter(i => isOk(i.json));\nconst fresh = items.filter(i => !isOk(i.json) && !noted(i.json));\nif (fresh.length) return fresh.map(i => ({ json: { ...i.json, _route: 'note' } }));\nif (ok.length) return ok.map(i => ({ json: { ...i.json, _route: 'run' } }));\nreturn [{ json: { cfg, _route: 'none' } }];"
+      },
+      "id": "6600d5b4-73df-4d31-92a1-534ff0bd1db1",
+      "name": "1d. Approval Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4688,
+        -1216
+      ],
+      "notes": "T-44: route = run (approved), note (unapproved, note not written yet) or none. One route per pass so the client loop is reached once."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2. Parse Sound Effects": {
+      "main": [
+        [
+          {
+            "node": "3. Has Sounds?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Has Sounds?": {
+      "main": [
+        [
+          {
+            "node": "4. Build Batch Drive Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "4. Build Batch Drive Query": {
+      "main": [
+        [
+          {
+            "node": "5. Search Drive (All Files at Once)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Search Drive (All Files at Once)": {
+      "main": [
+        [
+          {
+            "node": "6. Map Files to URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Map Files to URLs": {
+      "main": [
+        [
+          {
+            "node": "7. Write Sound_Effects_URL to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0a2. Load Client Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a2. Load Client Outputs": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "0d. All Clients Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Records Needing SFX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Records Needing SFX": {
+      "main": [
+        [
+          {
+            "node": "1z. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1z. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "1d. Approval Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Write Sound_Effects_URL to Airtable": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "0e. Loop Return": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1e. Approved?": {
+      "main": [
+        [
+          {
+            "node": "2. Parse Sound Effects",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1f. Needs Note?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1f. Needs Note?": {
+      "main": [
+        [
+          {
+            "node": "1g. Re-read Notes (Not Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1g. Re-read Notes (Not Approved)": {
+      "main": [
+        [
+          {
+            "node": "1h. Build Skip Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1h. Build Skip Notes": {
+      "main": [
+        [
+          {
+            "node": "1i. Write Not Approved Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1i. Write Not Approved Note": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d. Approval Gate": {
+      "main": [
+        [
+          {
+            "node": "1e. Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ddcdb280-2ed3-4def-9698-5522ae841c76",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "6pIXjTYTsXtiNYTx",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

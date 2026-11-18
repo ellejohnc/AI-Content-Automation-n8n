@@ -1,0 +1,897 @@
+{
+  "name": "WF04 - Script Generator (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "5c4b4527-8b6a-44a3-a86d-7259473e3334",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        3504,
+        -1568
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "9d9ddbbb-4dbe-4e48-a29e-580c0ca4a1e3",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        3504,
+        -1760
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblSBKG2Zx2nZUPIT",
+          "mode": "id"
+        },
+        "filterByFormula": "AND(NOT({Topic} = ''), NOT({Platform} = ''), NOT({Content Type} = ''), OR({Status} = 'Ready for Script', AND({Status} = 'Script Done', {Script_Approval} = 'Revision Required', OR(NOT({Script_Feedback} = ''), {Script_Revision_Count} >= 1))))",
+        "options": {}
+      },
+      "id": "a028baab-8bf0-4ec3-ae86-1306ef76bd85",
+      "name": "1. Get Ready for Script Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        -1648
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "416aa9a2-ce91-473d-9b09-097327aa04f7",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f5b86194-2ddd-4e94-a1ca-1bf7ab3a9189",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3952,
+        -1648
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "086ba6ac-0f2d-4ea8-9e74-2063e1d9e874",
+      "name": "1c. Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4176,
+        -1648
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2952d28e-0c36-46cb-918b-efaa14bba92d",
+      "name": "All Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4400,
+        -1840
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "8b068b8e-aa1d-4cd6-aec7-a69d177272b9",
+      "name": "1d. Wait 5s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        4400,
+        -1648
+      ],
+      "webhookId": "4b39287f-0c52-4e0a-afa4-e29d520ce4d6"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl12IsF6vUdPY60r",
+          "mode": "id"
+        },
+        "filterByFormula": "{Processed} = TRUE()",
+        "returnAll": false,
+        "options": {}
+      },
+      "id": "52e1b9bb-1a8b-4d0a-95a1-7f6ab547ab37",
+      "name": "2. Get Viral Patterns & Transcripts",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4624,
+        -1648
+      ],
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// WF04 v3 (14 Oct 2026): prompts follow John's script skills\n//   alfredai-news-script-generator v3.0, alfredai-education-script-generator v2.0, product-themed-script-generator.\n// Shared: Initial Anticipation > Loading > Rising Stakes > Rehook > Practical Payoff > CTA,\n// topic/audience-driven hook family (Controversy, Authority, Curiosity, Relatability, Storytelling),\n// no back-to-back repeat of the previous script's family or phrasing, scene timing, editing rhythm,\n// platform captions, YouTube package, ManyChat flow, manual review brief and QA checklist.\n// The model returns ONE JSON object; node 5 turns it into the Airtable fields.\nconst record = $('1c. Batch of 1').first().json;\nconst patterns = $('2. Get Viral Patterns & Transcripts').all();\nconst recent = $('2b. Get Recent Hooks').all().map(i => i.json).filter(r => r && r.id && r.id !== record.id);\n// The idea's own source video (Viral Library row with the same URL): factual source material, not structure.\nlet sourceRow = {};\ntry { sourceRow = $('2c. Get Source Transcript').first().json || {}; } catch (e) { sourceRow = {}; }\nconst sourceTranscript = String(sourceRow['Transcript'] || '').trim();\nconst sourceText = (sourceTranscript && sourceTranscript !== 'TRANSCRIPT_UNAVAILABLE') ? sourceTranscript.substring(0, 4000) : '';\n\nconst sel = v => (v && typeof v === 'object') ? (v.name || '') : String(v || '');\nconst topic = String(record['Topic'] || '').trim();\nconst rawCategory = sel(record['Category']).trim();\nconst platform = sel(record['Platform']) || 'YouTube';\nconst contentType = sel(record['Content Type']) || 'Video';\nconst sourceName = String(record['Source Name'] || '').trim();\nconst sourceUrl = String(record['Source URL'] || '').trim();\nconst angle = String(record['Suggested_Angle'] || '').trim();\n\n// Same theme mapping as WF06 avatar selection, so script skill and avatar always agree.\nconst SKILL_MAP = { 'News': 'News', 'Business': 'News', 'Tech': 'News', 'Entertainment': 'News', 'Other': 'News', 'General': 'News', '': 'News',\n  'Education': 'Education', 'Health': 'Education', 'Lifestyle': 'Education', 'Motivation': 'Education', 'Comedy': 'Education',\n  'Product': 'Product', 'Product Intro': 'Product' };\nconst skill = SKILL_MAP[rawCategory] || 'News';\n\nconst srcUrl = String(record['Source URL'] || '').trim();\nconst usable = patterns.filter(p => { const t = String(p.json['Transcript'] || '').trim(); return t && t !== 'TRANSCRIPT_UNAVAILABLE' && String(p.json['URL'] || '').trim() !== srcUrl; });\nconst pool = usable.length ? usable : patterns;\nconst pattern = pool.length ? pool[Math.floor(Math.random() * pool.length)].json : {};\nconst transcript = String(pattern['Transcript'] || '').substring(0, 2000);\n\n// Previous scripts in the content sequence (newest first), for hook-family and phrasing rotation.\nconst firstLine = s => String(s || '').trim().split(/\\n+/)[0].substring(0, 200);\nconst pickLine = (txt, key) => { const m = String(txt || '').match(new RegExp('^' + key + ':\\\\s*(.+)$', 'mi')); return m ? m[1].trim() : ''; };\nconst prev = recent.slice(0, 5).map((r, i) => {\n  const fam = sel(r['Hook_Family']);\n  const cat = sel(r['Category']);\n  let line = (i + 1) + '. ' + (fam || 'unknown') + ' | ' + (cat || '-') + ' | opening: \"' + firstLine(r['Script']) + '\"';\n  const trade = pickLine(r['Script_Review_Brief'], 'Trade');\n  const demo = pickLine(r['Script_Review_Brief'], 'Demo');\n  if (trade || demo) line += ' | trade/demo: ' + trade + ' / ' + demo;\n  return line;\n});\nconst lastFamily = recent.length ? sel(recent[0]['Hook_Family']) : '';\n\nconst HOOKS = {\n  News: [\n    'Controversy: the story exposes a disagreement or challenges a popular belief. Formats: direct challenge, contrarian reframe, \"the industry does not agree...\".',\n    'Authority: a credible person, company or number gives the story weight. Formats: high-stakes fact, named decision, authority principle.',\n    'Curiosity: the important detail is hidden behind the headline. Formats: hidden flaw, withheld information, \"here is what they did not tell you...\".',\n    'Relatability: the story mirrors a decision or uncertainty the viewer already feels. Formats: \"If you are watching this from operations...\", a familiar work moment.',\n    'Storytelling: the story has a sequence, reversal, conflict or unusual human decision. Formats: \"First this happened. Then the unexpected part...\".'\n  ],\n  Education: [\n    'Controversy: the lesson challenges a common belief. Formats: \"The popular advice is wrong\", \"stop learning the wrong thing\".',\n    'Authority: a credible source or expert supports the lesson. Formats: \"A major report suggests...\", \"the one principle leaders use...\".',\n    'Curiosity: the answer is useful but not obvious. Formats: \"The most important skill is not...\", \"here is what people leave out...\".',\n    'Relatability: the viewer recognises the situation from work or career. Formats: \"If you work in construction and keep seeing...\".',\n    'Storytelling: the lesson is best understood through a sequence or scenario. Formats: \"Imagine the first week after...\", \"this is what changed...\".'\n  ],\n  Product: [\n    'Controversy: the viewer relies on a familiar but weak method. Example: \"Another generic chatbot will not solve this trade workflow.\"',\n    'Authority: the lesson is a clear buying or implementation principle. Example: \"The first thing to check before automating this process is...\"',\n    'Curiosity: the hidden cost or missing handoff is the strongest angle. Example: \"The part of this workflow nobody shows you is...\"',\n    'Relatability: the trade\\'s daily struggle creates immediate recognition. Example: \"If you are a [trade] still doing [specific pain], this is for you.\"',\n    'Storytelling: a before-and-after scenario makes the workflow easier to understand. Example: \"If I woke up tomorrow with this problem, here is exactly what I would do.\"'\n  ]\n};\n\nconst RUNTIME = { News: '60-90 seconds (about 130-195 spoken words at 130 wpm)', Education: '45-60 seconds (about 100-130 spoken words at 130 wpm)', Product: 'under 2 minutes; prefer 60-110 seconds (about 130-240 spoken words at 130 wpm)' };\n\nconst SHARED_RULES = [\n  'HOOK FAMILY SELECTION (mandatory):',\n  '- Choose exactly one family from the list below based on the topic\\'s conflict, the audience and the evidence. Never choose randomly.',\n  '- Do NOT use the same family as the immediately previous script' + (lastFamily ? ' (previous: ' + lastFamily + ')' : '') + ', and do not reuse the sentence pattern of any recent opening listed below.',\n  '- Controversy only when the topic contains a real disagreement or a widely held belief the evidence contradicts; otherwise use the family that matches the evidence (Authority for a credible source or number, Curiosity for a hidden detail, Relatability for a familiar work moment, Storytelling for a sequence or reversal).',\n  '- Record the family and the exact hook format you used.',\n  '',\n  'PREVIOUS SCRIPTS IN THE CONTENT SEQUENCE (newest first):',\n  prev.length ? prev.join('\\n') : '(none recorded yet)',\n  '',\n  'PSYCHOLOGY STRUCTURE (every script, in this order; one or more scenes per beat):',\n  '1. Initial Anticipation - open with a conflict, unusual fact, direct challenge or unanswered question; make the viewer ask what is going on.',\n  '2. Loading - build with evidence, examples, named positions or specific detail; delay the final interpretation without filler.',\n  '3. Rising Stakes - show why it matters: consequences for decisions, money, risk, trust or control.',\n  '4. Rehook - after a first reveal, open a second meaningful question with a clean transition; no fake cliffhanger.',\n  '5. Practical Payoff - resolve every open loop; state what it means and what to do; keep it grounded in the evidence.',\n  '6. CTA - one clear action only.',\n  '',\n  'EDITING AND PACING (put these into each scene\\'s visual and on_screen_text notes, and summarise in editing_notes):',\n  '- The opening visual and on-screen hook land within the first 1-2 seconds.',\n  '- Change the visual state every 2-4 seconds (direct-to-camera cuts, text cards, diagrams, source snippets, examples).',\n  '- Faster cuts while loading evidence; a short pause before the rehook; slow slightly in the payoff.',\n  '- Hold the final CTA on screen for at least 3 seconds.',\n  '- On-screen text is shorter than the spoken sentence; never a full paragraph on screen.',\n  '- Never use editing to imply certainty, evidence or automation that does not exist.',\n  '',\n  'LANGUAGE: short sentences, simple words, one idea per sentence, peer-to-peer, no hype, no fearmongering, no corporate filler, no emojis in the spoken copy.',\n  'FACTS: use only facts from the TOPIC, SOURCE and ANGLE below or well-established general knowledge. Never invent statistics, quotes, studies, case studies, dates or certainty. Anything time-sensitive or uncertain goes into review_brief.checks as something to verify before publishing.',\n  'SPOKEN COPY: each scene\\'s \"spoken\" value is exactly what the avatar says - no labels, no stage directions, no brackets, no markdown, no emojis.'\n].join('\\n');\n\nlet skillBlock = '';\nlet metaSpec = '';\nif (skill === 'News') {\n  skillBlock = [\n    'SKILL: AlfredAI Thought Leadership / Commentary Script Generator v3.0 (news-first commentary, not a news bulletin and not a product pitch).',\n    'WORKFLOW: separate confirmed facts, attributed opinions, interpretation and unresolved claims. Reduce the story to one sentence: what happened and what most people misunderstand (the central gap). Pick ONE primary viewer (construction owner, operations leader, project director, digital leader or AI decision-maker) and the implication that matters to them. Find the natural construction connection.',\n    'GUARDRAILS (non-negotiable):',\n    '- Spoken script and public captions are unbranded. Never mention AlfredAI, a product feature or a product demo.',\n    '- No news-anchor framing (\"Breaking news\", \"I\\'m reporting on\").',\n    '- Attribute claims with said, called for, backed, warned, argued, proposed or rejected.',\n    '- Construction is a natural final connection or broader implication, never a sales pivot.',\n    '- One engagement CTA; a comment keyword is preferred (then ManyChat applies).',\n    '- Do not default to \"X is officially dead\". Rotate implication language: we are moving toward, the new baseline is, the old assumption is weakening, the decision has changed, this exposes a larger shift.',\n    '- Rehook transitions that fit: \"That is the part most people are missing.\" / \"But the disagreement is where this gets interesting.\" / \"And this changes the question for construction.\"',\n    '- Voice: conversational, observational, calm, punchy; an informed peer.',\n    'TARGET RUNTIME: ' + RUNTIME.News + '.'\n  ].join('\\n');\n  metaSpec = '{\"topic\": \"\", \"primary_audience\": \"\", \"central_gap\": \"\", \"target_runtime\": \"60-90 seconds\", \"cta\": \"keyword or engagement action\", \"source_status\": \"fact-check note: what is confirmed, attributed or unresolved\"}';\n} else if (skill === 'Education') {\n  skillBlock = [\n    'SKILL: AlfredAI Education Script Generator v2.0 (direct-to-camera lesson, curiosity-led, no product pitch).',\n    'WORKFLOW: write the single lesson in one sentence; identify the common assumption it challenges; choose one credible source or authority; name ONE primary viewer (estimator, project manager, construction leader, apprentice, operations lead or similar) and why it matters to them now.',\n    'EDUCATION PATTERN INSIDE THE SHARED STRUCTURE: Curiosity hook (withhold the answer) = Initial Anticipation. Authority reference and teaser/misdirection (eliminate one or two obvious answers) = Loading and Rising Stakes. Reveal = Rehook (reveal the insight, then open one final question). Why + construction context + one or two concrete actions = Practical Payoff. Save/share CTA = CTA.',\n    'Approximate timing: Initial Anticipation 0:00-0:05, Loading 0:05-0:18, Rising Stakes 0:18-0:30, Rehook 0:30-0:36, Practical Payoff 0:36-0:53, CTA 0:53-1:00.',\n    'GUARDRAILS (non-negotiable):',\n    '- Spoken script and public captions are unbranded. Never mention AlfredAI, a product or a demo; no sales pitch; do not argue one narrow operational pain point as a sales angle.',\n    '- Do not reveal the core insight in the first sentence.',\n    '- Credible references only; never invent studies, statistics, quotes or predictions; no fear-based career claims.',\n    '- CTA is save, share or follow. Use a comment keyword only if a real follow-up resource exists - assume it does not, so ManyChat is normally not applicable.',\n    '- Voice: helpful mentor, speaks to \"you\", confident without overclaiming, practical example over abstraction.',\n    'TARGET RUNTIME: ' + RUNTIME.Education + '.'\n  ].join('\\n');\n  metaSpec = '{\"lesson\": \"\", \"primary_audience\": \"\", \"challenged_assumption\": \"\", \"authority_source\": \"\", \"target_runtime\": \"45-60 seconds\", \"cta_type\": \"save / share / follow\"}';\n} else {\n  const painDb = \"Estimators:\\n- 1. Manual takeoff errors: Manual quantity extraction from complex PDFs is slow and prone to human error, leading to inaccurate bids.\\n- 2. Outdated material pricing: Fluctuating material costs mean estimators waste hours manually updating spreadsheets, risking outdated bids.\\n- 3. Rushed bid deadlines: The high volume of tender requests means estimators rush through bids or miss deadlines entirely.\\n- 4. Disconnected PM data: Data silos between estimating software and PM tools lead to miscommunication and cost overruns during execution.\\n- 5. Historical bid comparison: Historical pricing data is buried in old folders, making it impossible to leverage past success for new bids.\\n- 6. Last-minute addendums: Late changes to scope require manual recalculations across multiple spreadsheets, risking catastrophic errors.\\n\\nQuantity Surveyors (QS):\\n- 7. Manual variation tracking: Chasing down site teams for variation details and manually updating cost reports leads to disputed final accounts.\\n- 8. Tedious pay app reviews: Manually cross-checking subcontractor invoices against work completed is slow, tedious, and delays payments.\\n- 9. Poor cost-to-complete visibility: Gathering data from fragmented systems means cost reports are reactive, not proactive.\\n- 10. Contract dispute resolution: When disputes arise, finding the specific email or RFI to prove your case is like finding a needle in a haystack.\\n- 11. Time-consuming lifecycle costing: Gathering the long-term maintenance and operational data required for accurate lifecycle costing is highly manual.\\n- 12. BOQ vs. site usage discrepancies: Tracking the variance between the initial BOQ and actual material usage requires constant, manual reconciliation.\\n\\nProject Managers:\\n- 13. Drowning in RFI management: Manually routing RFIs, chasing architects for answers, and updating the site team causes massive delays.\\n- 14. Fragmented communication: Critical project decisions are scattered across personal devices, creating compliance risks and confusion.\\n- 15. Delayed daily site reports: Site managers spend hours writing reports, meaning PMs don't get the data until it's too late to act.\\n- 16. Subcontractor coordination: Manually adjusting schedules when one trade is delayed causes a domino effect of chaos across the site.\\n- 17. Missing compliance documentation: Chasing subcontractors for safety inductions and compliance docs is a massive administrative headache.\\n- 18. Manual status update meetings: PMs spend hours compiling data just to tell stakeholders what happened three days ago.\\n- 19. Managing handover and defects: Managing hundreds of minor defects via spreadsheets leads to missed items and delayed final payments.\\n\\nBuilders / Developers:\\n- 20. Slow feasibility studies: Gathering zoning data, cost estimates, and market analysis manually slows down critical investment decisions.\\n- 21. Finance vs. construction data: Developers struggle to reconcile construction progress with drawdowns because the data lives in different silos.\\n- 22. Complex stakeholder reporting: Compiling monthly reports for investors, banks, and partners requires pulling data from a dozen different sources.\\n- 23. Permitting approval delays: Navigating complex local regulations and ensuring every application is perfect is highly manual and prone to rejection.\\n- 24. Scaling without bloating overhead: Growing a development business usually means hiring armies of admins to manage the paperwork.\\n- 25. Tracking legacy warranty claims: Tracking which contractor is responsible for a defect years after completion relies on lost emails and dead spreadsheets.\\n\\nFlooring Contractors & Specialists:\\n- 26. Sales to installer handoff failures: Incomplete job handoffs mean installers arrive on site missing materials or unaware of specific site conditions.\\n- 27. Inaccurate measurements and waste: Manual measurements and estimations lead to either shortfalls that delay jobs or excess waste that eats profits.\\n- 28. Chasing GCs for payment: Submitting manual pay apps that get rejected for minor formatting errors delays cash flow for weeks.\\n- 29. Predecessor trade delays: Sending a crew to a site only to find the drywallers aren't finished costs thousands in wasted labor.\\n- 30. High volume of small quotes: The administrative burden of quoting small jobs manually outweighs the profit margin on the work itself.\\n- 31. Tracking material lead times: Manually tracking lead times across dozens of suppliers leads to scheduling disasters and unhappy clients.\\n\\nConstruction Business Owners & Operators:\\n- 32. Unpredictable cash flow: Manual invoicing and delayed AR tracking mean cash goes out for payroll weeks before it comes in from clients.\\n- 33. Leadership burnout: Owners are stuck in the weeds of daily operations, unable to focus on high-level strategy and growth.\\n- 34. Inaccurate profit forecasting: Data is siloed across estimating, PM, and accounting software, making accurate financial forecasting impossible.\\n- 35. High staff turnover: Highly skilled PMs and estimators are quitting because they spend 70% of their time doing administrative paperwork.\\n- 36. Legacy software replacement risk: Owners want better technology but are terrified of the downtime and training required to replace their current systems.\\n- 37. Lack of standardized processes: Without standardized workflows, quality and profitability vary wildly from project to project.\\n- 38. Hitting the revenue ceiling: The manual processes that got a company to $5M completely break down when trying to scale further.\\n\\nEstimators & Sales Teams:\\n- 39. Quoting unqualified leads: Manually filtering through tire-kickers and unqualified leads takes time away from high-value prospects.\\n- 40. Slow response times: When an estimator takes three days to return a quote, the client has already signed with a competitor.\\n- 41. Dropped follow-ups: Sales teams send out quotes but lack the time to consistently follow up, leaving money on the table.\\n- 42. Sales vs. estimating disconnect: Sales teams lack real-time access to current estimating costs, leading to inaccurate verbal quotes.\\n- 43. Inefficient CRM usage: Sales reps hate manually logging calls and updating CRM statuses, so the data is always inaccurate.\\n- 44. Tracking win/loss ratios: Without easy access to win/loss data, teams keep bidding on project types they historically lose money on.\\n\\nResidential & Commercial Trade Businesses:\\n- 45. Chaotic dispatching: Manual scheduling leads to inefficient routes, late arrivals, and frustrated customers.\\n- 46. Uncaptured change orders: Field workers do extra work but fail to process the formal change order, meaning the business never gets paid for it.\\n- 47. After-hours emergency calls: Managing an after-hours emergency roster is stressful and prone to missed calls.\\n- 48. Van inventory shrinkage: Tracking small parts across a fleet of vehicles is impossible manually, leading to stockouts and delays.\\n- 49. Inconsistent customer updates: Customers call the office constantly because they don't know when the tech is arriving or if the part is ordered.\\n- 50. Transitioning to commercial work: Commercial work requires massive compliance, complex pay apps, and strict data governance that residential tools can't handle.\";\n  skillBlock = [\n    'SKILL: Product-Themed Script Generator (curiosity through empathy, unbranded, enterprise AI).',\n    'THE 1:1:1:1 RULE (non-negotiable): exactly ONE target audience, ONE trade (ONLY Timber Flooring, Windows, Blinds, Painting, Steel Fabrication or Contract Building), ONE pain point (from the database below, with its number) and ONE demo (ONLY: From Drawings to Estimate, Alfred AI Bid Management, AI Vendor Compliance Agent, AI Timber Quote Flooring Builder) that directly solves that pain point for that trade. Never blend. If the topic is broad, choose the single most natural matrix and say so in review_brief.checks.',\n    'DEMO TO TRADE MAPPING:',\n    '- From Drawings to Estimate: Contract Building, Windows, Blinds, Painting, Steel Fabrication. Audiences: Estimators, Builders, Trade Business Owners. Pains: manual takeoffs, missing details or variations in plans, inaccurate material quantities, 2D plans disconnected from pricing. Angle: complex drawing to accurate estimate without manual data entry.',\n    '- Alfred AI Bid Management: Contract Building, Steel Fabrication. Audiences: Project Managers, Estimators, Builders. Pains: drowning in subcontractor quotes, missed bid deadlines, disorganised bid levelling, losing track of competitive pricing. Angle: collect, compare and manage bids in one place.',\n    '- AI Vendor Compliance Agent: Contract Building, Steel Fabrication, Painting. Audiences: Project Managers, Business Owners, Admin Teams. Pains: expired insurance certificates, non-compliant subcontractors on site, tedious vendor onboarding, fragmented compliance documents. Angle: track, verify and collect vendor compliance documents.',\n    '- AI Timber Quote Flooring Builder: Timber Flooring ONLY. Audiences: Flooring Contractors, Estimators. Pains: waste and board-length calculations, material types and finishes, slow quote turnaround, inconsistent pricing across reps. Angle: complex flooring quotes with every variable included.',\n    '- Rotate: avoid the trade/demo combination of the recent scripts listed above.',\n    'PAIN POINTS DATABASE (pick one; use its number):',\n    painDb,\n    'NARRATIVE MAPPING: Hook (audience + trade + specific tension, trade named in the first sentence) = Initial Anticipation. Problem agitation in the trade\\'s exact vocabulary = Loading. Cost, risk, delay or missed opportunity = Rising Stakes. First layer of the solution, then \"what a generic tool still cannot see\" = Rehook. The one demo in operation - what it reads, prepares, routes, checks or records, and where the human stays responsible - plus orchestration, data governance, controlled access, auditability = Practical Payoff. One keyword (e.g. ESTIMATE, DRAWINGS, TENDER, COMPLIANCE, QUOTE) to comment or DM = CTA.',\n    'GUARDRAILS (non-negotiable):',\n    '- Never mention AlfredAI anywhere: script, captions, YouTube fields, ManyChat customer-facing copy, CTA. Say enterprise AI, governed workflow, workflow orchestration.',\n    '- AI complements trade expertise; it never replaces it. Human-in-the-loop is explicit.',\n    '- Contrast generic consumer AI with a governed workflow without insulting the audience.',\n    '- No quantified impact (no \"10x\", \"99%\", \"70%\", ROI) - none has been supplied as approved evidence. State benefits qualitatively.',\n    '- Say coordinate, check, route, prepare, record before \"orchestration\". No hype (revolutionary, perfect, guaranteed). The demo is practical, not magical.',\n    '- ManyChat always applies: the keyword in the spoken CTA must match the ManyChat trigger.',\n    'Every scene also needs voice_direction and motion (delivery note for the avatar) and a visual/demo note that matches what the demo can actually show.',\n    'TARGET RUNTIME: ' + RUNTIME.Product + '.'\n  ].join('\\n');\n  metaSpec = '{\"target_audience\": \"\", \"trade\": \"\", \"pain_point\": \"number and name from the database\", \"demo\": \"\", \"cta_keyword\": \"\", \"target_runtime\": \"under 2 minutes\"}';\n}\n\nconst OUTPUT = [\n  'OUTPUT: return ONE valid JSON object and nothing else (no markdown, no code fences). Keys:',\n  '{',\n  '  \"metadata\": ' + metaSpec + ',',\n  '  \"hook_family\": \"Controversy | Authority | Curiosity | Relatability | Storytelling\",',\n  '  \"hook_format\": \"the exact hook format used\",',\n  '  \"scenes\": [ { \"start\": \"m:ss\", \"end\": \"m:ss\", \"beat\": \"Initial Anticipation | Loading | Rising Stakes | Rehook | Practical Payoff | CTA\", \"spoken\": \"exact spoken copy\", \"purpose\": \"\", \"on_screen_text\": \"short overlay\", \"visual\": \"visual / editing note\", \"voice_direction\": \"\", \"motion\": \"\" } ],',\n  '  \"editing_notes\": [\"editing rhythm, visual pacing, retention and rehook guidance\"],',\n  '  \"captions\": { \"instagram\": \"\", \"tiktok\": \"\", \"linkedin\": \"\", \"youtube\": \"short-form or community post caption\" },',\n  '  \"youtube\": { \"title\": \"\", \"alt_titles\": [\"\", \"\"], \"description\": \"paste-ready; the first two lines stand alone before Show more\", \"chapters\": [ { \"time\": \"0:00\", \"title\": \"\" } ], \"keywords\": [\"\"], \"tags\": [\"\"], \"hashtags\": [\"5-6, with #\"], \"thumbnail_text\": \"\", \"thumbnail_concept\": \"\", \"sources\": [\"source links or references for time-sensitive claims\"], \"publication_note\": \"what must be rechecked before publishing\" },',\n  '  \"manychat\": { \"applicable\": true, \"keyword\": \"\", \"scope\": \"which Reel\", \"public_reply\": \"\", \"opening_dm\": \"explains the value of continuing\", \"button_label\": \"\", \"follow_up_dm\": \"with [APPROVED LINK] placeholder when relevant\", \"internal_tags\": [\"\"], \"activation_checks\": [\"\"] },',\n  '  \"review_brief\": { \"hook_rationale\": \"why this family fits the topic and audience, and the previous-hook check\", \"beats\": \"how each of the six beats is used\", \"checks\": [\"facts, positions, sources or matrix choices a human must verify\"], \"guardrail_checks\": \"unbranded / no-product-pitch (News, Education) or 1:1:1:1, demo-to-pain, human-in-the-loop, data governance and claims (Product)\", \"cta\": \"the exact CTA and keyword\", \"runtime_pacing\": \"target runtime and pacing notes\" },',\n  '  \"qa_checklist\": [ { \"item\": \"each item of this skill\\'s quality checklist\", \"pass\": true, \"note\": \"\" } ],',\n  '  \"estimated_runtime_seconds\": 0',\n  '}',\n  'Rules for the JSON: chapters use the actual scene timings. If the CTA is only save, share or follow, set manychat.applicable to false and leave its other fields empty. Captions are unbranded, plain text, aligned with the script, add no new claims; Instagram 60-120 words with hashtags at the end, TikTok short hook plus 3-5 hashtags, LinkedIn 100-150 words professional.'\n].join('\\n');\n\nconst reference = transcript ? [\n  'STRUCTURAL REFERENCE ONLY (another creator\\'s published video, pattern: ' + (pattern['Reusable_Pattern'] || 'n/a') + '):',\n  transcript,\n  'SOURCE USE - NON-NEGOTIABLE: take only pacing and rhetorical shape from this reference. Do not reuse its sentences, phrasing, examples, analogies, statistics, claims or CTA keyword, and do not paraphrase it line by line. Your opening sentence must not resemble its opening sentence. If it is about another subject, ignore its content entirely.'\n].join('\\n') : '';\n\nconst sourceBlock = sourceText ? [\n  'SOURCE MATERIAL (transcript of the video this idea came from' + (sourceName ? ', by ' + sourceName : '') + '):',\n  sourceText,\n  'Use it as the factual basis: attribute its claims to the creator (said, argued, warned...), separate fact from opinion, and do not copy its sentences, hook or CTA keyword.'\n].join('\\n') : 'SOURCE MATERIAL: none available. Work only from the topic; list every factual claim in review_brief.checks.';\n\nconst input = [\n  'TOPIC: ' + topic,\n  'CATEGORY ON RECORD: ' + (rawCategory || 'none') + ' (skill applied: ' + skill + ')',\n  'PLATFORM: ' + platform + ' | CONTENT TYPE: ' + contentType,\n  sourceName ? 'SOURCE NAME: ' + sourceName : '',\n  sourceUrl ? 'SOURCE URL: ' + sourceUrl : '',\n  angle ? 'APPROVED ANGLE FROM MARKETING REVIEW:\\n' + angle : ''\n].filter(Boolean).join('\\n');\n\nconst prompt = [skillBlock, '', 'HOOK FAMILIES FOR THIS SKILL:', HOOKS[skill].map(h => '- ' + h).join('\\n'), '', SHARED_RULES, '', reference, '', input, '', sourceBlock, '', OUTPUT].join('\\n');\n\nreturn { json: {\n  record_id: record.id || '',\n  topic: topic,\n  platform: platform,\n  content_type: contentType,\n  category: rawCategory,\n  skill: skill,\n  previous_family: lastFamily,\n  has_source: !!sourceText,\n  pattern_name: pattern['Reusable_Pattern'] || 'Unknown Pattern',\n  prompt: prompt\n} };\n"
+      },
+      "id": "992f7f14-447e-401a-9fd3-957fe657ac6c",
+      "name": "3. Build Viral-Aware Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5072,
+        -1456
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4.1-mini', temperature: 0.7, max_tokens: 9000, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"You are a construction-industry short-form video scriptwriter. You follow the skill in the user prompt exactly, including its guardrails, the six-beat psychology structure, the hook-family rule and the runtime. You return ONE valid JSON object with exactly the keys requested and nothing else: no markdown, no code fences, no commentary. Spoken copy contains only the words the presenter says.\" }, { role: 'user', content: $json.prompt } ] }) }}",
+        "options": {}
+      },
+      "id": "ccafcef4-6774-4a04-86ce-009f6776ea6f",
+      "name": "4. Generate Script (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        5072,
+        -1648
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "x9t1HtZVkPLKi1dp",
+          "name": "OpenAI Bearer Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// WF04 v3: turns the model's JSON into Airtable fields. Script = spoken copy only (WF06 sends it to HeyGen).\nconst response = $input.first().json;\nconst promptData = $('3. Build Viral-Aware Prompt').first().json;\nconst record = $('1c. Batch of 1').first().json;\nconst NL = '\\n';\nconst sel = v => (v && typeof v === 'object') ? (v.name || '') : String(v || '');\nconst str = v => (v == null ? '' : String(v)).trim();\nconst arr = v => Array.isArray(v) ? v.map(str).filter(Boolean) : (str(v) ? [str(v)] : []);\n\nlet raw = '';\nlet out = null;\nlet parseError = '';\ntry {\n  raw = response.choices[0].message.content || '';\n  const finish = response.choices[0].finish_reason || '';\n  out = JSON.parse(raw.replace(/```json/g, '').replace(/```/g, '').trim());\n  if (finish === 'length') parseError = 'model output was cut off (max_tokens)';\n} catch (e) {\n  parseError = response.error ? ('OpenAI error: ' + (response.error.message || JSON.stringify(response.error))) : ('model did not return valid JSON: ' + e.message);\n  out = null;\n}\n\nconst scenes = (out && Array.isArray(out.scenes)) ? out.scenes.filter(s => s && str(s.spoken)) : [];\nif (!parseError && !scenes.length) parseError = 'no scenes with spoken copy in the model output';\nconst ok = !parseError;\n\nconst cleanSpoken = t => str(t)\n  .replace(/\\[[^\\]]*\\]/g, '')\n  .replace(/\\*\\*(.*?)\\*\\*/g, '$1').replace(/\\*(.*?)\\*/g, '$1')\n  .replace(/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/gu, '')\n  .replace(/[ \\t]+/g, ' ').trim();\n\nlet script = scenes.map(s => cleanSpoken(s.spoken)).filter(Boolean).join(NL + NL);\nif (script.length > 5000) script = script.substring(0, 5000).trimEnd();\n\n// Scene timings are recomputed from the spoken words at 130 wpm, so the brief and chapters match the real read.\nconst fmt = sec => Math.floor(sec / 60) + ':' + String(Math.round(sec % 60)).padStart(2, '0');\nlet cursor = 0;\nconst timed = scenes.map(s => {\n  const w = cleanSpoken(s.spoken).split(/\\s+/).filter(Boolean).length;\n  const start = cursor; cursor += w / 130 * 60;\n  return { ...s, start: fmt(Math.round(start)), end: fmt(Math.round(cursor)), start_sec: Math.round(start) };\n});\n\n// Runtime check at 130 wpm against the skill's target.\nconst words = script.split(/\\s+/).filter(Boolean).length;\nconst estSeconds = Math.round(words / 130 * 60);\nconst TARGET = { News: [60, 90], Education: [45, 60], Product: [30, 119] };\nconst skill = promptData.skill || 'News';\nconst [tMin, tMax] = TARGET[skill] || [45, 90];\nconst runtimeFlag = (estSeconds < tMin || estSeconds > tMax) ? ('Estimated runtime ' + estSeconds + 's is outside the ' + skill + ' target (' + tMin + '-' + tMax + 's).') : '';\n\nconst meta = (out && out.metadata && typeof out.metadata === 'object') ? out.metadata : {};\nconst FAMILIES = ['Controversy', 'Authority', 'Curiosity', 'Relatability', 'Storytelling'];\nconst famRaw = str(out && out.hook_family);\nconst hookFamily = FAMILIES.find(f => famRaw.toLowerCase().includes(f.toLowerCase())) || '';\nconst hookFormat = str(out && out.hook_format);\nconst repeatFlag = (hookFamily && promptData.previous_family && hookFamily === promptData.previous_family) ? ('Hook family ' + hookFamily + ' repeats the previous script.') : '';\n\nconst cap = (out && out.captions) || {};\nconst instagramCaption = str(cap.instagram);\nconst tiktokCaption = str(cap.tiktok);\nconst linkedinCaption = str(cap.linkedin);\nconst youtubeCaption = str(cap.youtube);\n\n// Brand check: News, Education and Product copy must be unbranded.\nconst brandRe = /alfred\\s*ai/i;\nconst brandHits = [];\nif (brandRe.test(script)) brandHits.push('script');\nif (brandRe.test(instagramCaption)) brandHits.push('Instagram caption');\nif (brandRe.test(tiktokCaption)) brandHits.push('TikTok caption');\nif (brandRe.test(linkedinCaption)) brandHits.push('LinkedIn caption');\nconst yt = (out && out.youtube) || {};\nif (brandRe.test(JSON.stringify(yt))) brandHits.push('YouTube package');\nconst brandFlag = brandHits.length ? ('Brand mention found in: ' + brandHits.join(', ') + '. Remove before approval.') : '';\n\n// Production_Brief: scene-by-scene timing, beat, spoken copy and editing notes.\nconst sceneText = timed.map((s, i) => [\n  'Scene ' + (i + 1) + ' | ' + str(s.start) + '-' + str(s.end) + ' | ' + str(s.beat),\n  'Spoken: ' + cleanSpoken(s.spoken),\n  str(s.purpose) ? 'Purpose: ' + str(s.purpose) : '',\n  str(s.on_screen_text) ? 'On screen: ' + str(s.on_screen_text) : '',\n  str(s.visual) ? 'Visual: ' + str(s.visual) : '',\n  str(s.voice_direction) ? 'Voice: ' + str(s.voice_direction) : '',\n  str(s.motion) ? 'Motion: ' + str(s.motion) : ''\n].filter(Boolean).join(NL)).join(NL + NL);\nconst editing = arr(out && out.editing_notes);\nconst productionBrief = ok ? ('SCRIPT SCENES (WF04, ' + skill + ' skill)' + NL + 'Estimated runtime: ' + estSeconds + 's at 130 wpm (target ' + tMin + '-' + tMax + 's)' + NL + NL + sceneText\n  + (editing.length ? NL + NL + 'EDITING AND PACING' + NL + editing.map(e => '- ' + e).join(NL) : '')) : '';\n\n// YouTube_Package\n// Chapters: one per beat, at the recomputed start of that beat; titles from the model when the counts match.\nconst beatStarts = [];\ntimed.forEach(s => { const b = str(s.beat); if (!beatStarts.length || beatStarts[beatStarts.length - 1].beat !== b) beatStarts.push({ beat: b, sec: s.start_sec }); });\nconst ytCh = Array.isArray(yt.chapters) ? yt.chapters : [];\nconst chapters = beatStarts.map((b, i) => fmt(b.sec) + ' ' + ((ytCh.length === beatStarts.length && ytCh[i] && typeof ytCh[i] === 'object' && str(ytCh[i].title)) ? str(ytCh[i].title) : b.beat));\nif (chapters.length) chapters[0] = chapters[0].replace(/^\\S+/, '0:00');\nconst youtubePackage = ok ? [\n  'TITLE: ' + str(yt.title),\n  arr(yt.alt_titles).length ? 'ALTERNATIVE TITLES:' + NL + arr(yt.alt_titles).map(t => '- ' + t).join(NL) : '',\n  'DESCRIPTION:' + NL + str(yt.description),\n  chapters.length ? 'CHAPTERS:' + NL + chapters.join(NL) : '',\n  arr(yt.keywords).length ? 'KEYWORDS: ' + arr(yt.keywords).join(', ') : '',\n  arr(yt.tags).length ? 'TAGS: ' + arr(yt.tags).join(', ') : '',\n  arr(yt.hashtags).length ? 'HASHTAGS: ' + arr(yt.hashtags).join(' ') : '',\n  'THUMBNAIL TEXT: ' + str(yt.thumbnail_text),\n  'THUMBNAIL CONCEPT: ' + str(yt.thumbnail_concept),\n  arr(yt.sources).length ? 'SOURCES:' + NL + arr(yt.sources).map(s => '- ' + s).join(NL) : 'SOURCES: none listed',\n  str(yt.publication_note) ? 'PUBLICATION NOTE: ' + str(yt.publication_note) : '',\n  youtubeCaption ? 'SHORT-FORM / COMMUNITY CAPTION:' + NL + youtubeCaption : ''\n].filter(Boolean).join(NL + NL) : '';\n\n// ManyChat_Flow\nconst mc = (out && out.manychat) || {};\nconst mcOn = mc.applicable === true && str(mc.keyword);\nconst manychatFlow = !ok ? '' : (!mcOn ? 'Not applicable: the CTA is save, share or follow, not a comment or DM keyword.' : [\n  'KEYWORD TRIGGER: ' + str(mc.keyword),\n  'SCOPE: ' + str(mc.scope),\n  'PUBLIC COMMENT REPLY: ' + str(mc.public_reply),\n  'OPENING DM: ' + str(mc.opening_dm),\n  'BUTTON: ' + str(mc.button_label),\n  'FOLLOW-UP DM: ' + str(mc.follow_up_dm),\n  arr(mc.internal_tags).length ? 'INTERNAL TAGS: ' + arr(mc.internal_tags).join(', ') : '',\n  arr(mc.activation_checks).length ? 'ACTIVATION CHECKS:' + NL + arr(mc.activation_checks).map(c => '- ' + c).join(NL) : ''\n].filter(Boolean).join(NL));\n\n// Script_Review_Brief: metadata, warnings, review brief, QA checklist.\nconst label = k => k.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase()).replace(/^Cta/, 'CTA');\nconst metaLines = Object.keys(meta).map(k => label(k) + ': ' + str(meta[k]));\n// Product matrix lines are also read back by WF04 to rotate trade/demo combinations.\n// (label() turns trade/demo into the 'Trade:' and 'Demo:' lines.)\nconst rb = (out && out.review_brief) || {};\nconst qa = Array.isArray(out && out.qa_checklist) ? out.qa_checklist : [];\nconst warnings = [brandFlag, runtimeFlag, repeatFlag].filter(Boolean);\nconst qaFails = qa.filter(q => q && q.pass === false).length;\nconst reviewBrief = ok ? [\n  'SKILL: ' + skill + ' (John\\'s script skills v3)' + (sel(record['Script_Approval']) === 'Revision Required' ? ' | revision from Script_Feedback' : ''),\n  warnings.length ? 'WARNINGS:' + NL + warnings.map(w => '- ' + w).join(NL) : 'WARNINGS: none',\n  'METADATA:' + NL + metaLines.join(NL),\n  'Hook family: ' + (hookFamily || famRaw || 'not stated') + ' | Previous script: ' + (promptData.previous_family || 'none'),\n  'Hook format: ' + hookFormat,\n  'Estimated runtime: ' + estSeconds + 's (' + words + ' words at 130 wpm) | Target: ' + tMin + '-' + tMax + 's',\n  'Source transcript used: ' + (promptData.has_source ? 'yes (the idea\\'s own source video)' : 'no - every claim needs checking'),\n  'WHY THIS HOOK: ' + str(rb.hook_rationale),\n  'PSYCHOLOGY BEATS: ' + str(rb.beats),\n  arr(rb.checks).length ? 'CHECK BEFORE APPROVING:' + NL + arr(rb.checks).map(c => '- ' + c).join(NL) : '',\n  'GUARDRAILS: ' + str(rb.guardrail_checks),\n  'CTA: ' + str(rb.cta),\n  'RUNTIME AND PACING: ' + str(rb.runtime_pacing),\n  qa.length ? 'QUALITY CHECKLIST (model self-check, ' + (qa.length - qaFails) + '/' + qa.length + ' pass):' + NL + qa.map(q => (q && q.pass === false ? '[ ] ' : '[x] ') + str(q && q.item) + (str(q && q.note) ? ' - ' + str(q.note) : '')).join(NL) : ''\n].filter(Boolean).join(NL + NL) : '';\n\n// Category and tags (unchanged from v2: only fills an empty or Other category).\nconst topic = String(record['Topic'] || '').toLowerCase();\nconst existingCategory = sel(record['Category']).trim();\nlet detectedCategory = existingCategory;\nif (!existingCategory || existingCategory === 'Other') {\n  const src = topic + ' ' + script.toLowerCase().substring(0, 500);\n  if (/breaking|just happened|announce|launch|new release|update|report|revealed|leaked| news/.test(src)) detectedCategory = 'News';\n  else if (/how to|explained|guide|tutorial|learn|beginner|basics|what is|step by step|tips/.test(src)) detectedCategory = 'Education';\n  else detectedCategory = existingCategory || 'Other';\n}\nconst tags = [];\nif (detectedCategory === 'News' || /news|report|update/.test(topic)) tags.push('News');\nif (/how to|guide|step|tutorial/.test(topic)) tags.push('Tutorial');\nif (/review| vs |comparison/.test(topic)) tags.push('Review');\nif (/interview|talk with/.test(topic)) tags.push('Interview');\nif (/why|opinion|think/.test(topic)) tags.push('Commentary');\nif (/motivat|inspir|mindset/.test(topic)) tags.push('Motivation');\nif (!tags.length) tags.push('Other');\n\nreturn { json: {\n  record_id: promptData.record_id,\n  parse_ok: ok,\n  parse_error: parseError,\n  skill: skill,\n  script: script,\n  production_brief: productionBrief,\n  pattern_used: promptData.pattern_name,\n  tags: tags,\n  detected_category: detectedCategory,\n  category_changed: detectedCategory !== existingCategory,\n  instagram_caption: instagramCaption,\n  tiktok_caption: tiktokCaption,\n  linkedin_caption: linkedinCaption,\n  youtube_package: youtubePackage,\n  manychat_flow: manychatFlow,\n  review_brief: reviewBrief,\n  hook_family: hookFamily,\n  hook_type: hookFamily ? (hookFamily + (hookFormat ? ' - ' + hookFormat : '')) : hookFormat,\n  thumbnail_idea: str(yt.thumbnail_concept),\n  est_seconds: estSeconds,\n  warnings: warnings,\n  qa_fails: qaFails,\n  generated_at: new Date().toISOString()\n} };\n"
+      },
+      "id": "b67dc43a-790a-4a64-a96c-d82527bba2e3",
+      "name": "5. Preserve Data + Extract Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5296,
+        -1648
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "aa89f561-5224-493b-a5b9-540f7cce13b3",
+      "name": "Wait 2s Before Update",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        5520,
+        -1648
+      ],
+      "webhookId": "31564747-8887-420f-96d0-af25d1181c5c"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appgBzSHGSK2v8B6g/tblSBKG2Zx2nZUPIT/{{ $json.record_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED_AIRTABLE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ typecast: true, fields: $json.parse_ok ? Object.assign({\n  Status: 'Script Done',\n  Script: $json.script,\n  Production_Brief: $json.production_brief,\n  Category: $json.detected_category,\n  Tags: $json.tags,\n  Instagram_Caption: $json.instagram_caption,\n  LinkedIn_Caption: $json.linkedin_caption,\n  TikTok_Caption: $json.tiktok_caption,\n  YouTube_Package: $json.youtube_package,\n  ManyChat_Flow: $json.manychat_flow,\n  Script_Review_Brief: $json.review_brief,\n  Script_Generated_At: $json.generated_at,\n  Reel_Notes: $json.reel_notes_final,\n  Script_Approval: 'Pending'\n}, $json.hook_family ? { Hook_Family: $json.hook_family } : {}, $json.mode === 'regenerate' ? { Script_Revision_Count: 1 } : {}) : {\n  Status: 'Error - No Script',\n  Reel_Notes: $json.reel_notes_final\n} }) }}",
+        "options": {}
+      },
+      "id": "03f97330-405a-4027-be59-2fb99651aaf0",
+      "name": "6. Update Reel Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5744,
+        -1568
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.record_id }}",
+        "options": {}
+      },
+      "id": "cd29f35d-3068-4136-a63e-cc40651353c9",
+      "name": "5z. Fetch Existing Reel Notes",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        5408,
+        -1840
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Tagged-block write: re-read notes, replace only this stage's block, keep every other block.\nconst fresh = $input.item.json || {};\nconst d = $('5. Preserve Data + Extract Script').item.json;\n// T-43: gate mode from 1e (batch of 1). Fail closed - without it the revision count cannot be set safely.\nconst gate = $('1e. Approval Check').first().json;\nif (!gate || gate.id !== d.record_id) throw new Error('5y: Approval Check record does not match ' + d.record_id);\nconst mode = gate.mode || 'first';\n\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = '==============================';\nconst STAGE_TAG = 'SCRIPT (WF04)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(STAGE_TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst notesBase = freshNotes.replace(blockRe, '').trim();\n\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('Every 1 Minute').first().json.timestamp || '';\n  const st = Date.parse(raw);\n  if (st) {\n    triggered = new Date(st).toISOString().substring(0, 16).replace('T', ' ');\n    const secs = Math.max(0, Math.round((Date.now() - st) / 1000));\n    runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';\n  }\n} catch (e) {}\n\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nconst NLs = '\\n';\nconst block = sep + NLs + STAGE_TAG\n  + NLs + 'Triggered: ' + triggered\n  + NLs + 'Updated: ' + stamp\n  + NLs + 'Run time: ' + runtime\n  + (d.parse_ok\n    ? NLs + 'Stage: Complete'\n      + NLs + 'Script_Approval: Pending' + (mode === 'regenerate' ? ' (revision 1 from Script_Feedback)' : ' (first script)')\n      + NLs + 'Skill: ' + (d.skill || '') + ' (script skills v3; John\\'s 4 example scripts and skill QA checklists via 3b, T-57)'\n      + NLs + 'Hook Family: ' + (d.hook_family || 'not stated')\n      + NLs + 'Estimated runtime: ' + d.est_seconds + 's'\n      + NLs + 'Warnings: ' + ((d.warnings || []).length ? d.warnings.join(' ') : 'none')\n      + NLs + 'Pattern: ' + (d.pattern_used || '')\n      + NLs + 'Category: ' + (d.detected_category || '') + (d.category_changed ? ' (auto-detected)' : '')\n      + NLs + 'Review: see Script_Review_Brief, Production_Brief, YouTube_Package, ManyChat_Flow'\n    : NLs + 'Stage: Error - ' + (d.parse_error || 'no script returned')\n      + NLs + 'Detail: no script was written. Set Status back to Ready for Script to retry.');\n\nconst notesFinal = (notesBase ? notesBase + '\\n\\n' : '') + block;\n\nreturn { json: { ...d, mode: mode, reel_notes_final: notesFinal } };\n"
+      },
+      "id": "1ef4c408-d38a-42d5-afeb-1504763528f7",
+      "name": "5y. Build Script Notes Block",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        -1840
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-43 gate check. Gate 1: Production_Approval must be ticked before any script work.\n// Gate 2: Script_Approval = Revision Required -> one automatic rewrite from Script_Feedback, then manual edit.\n// Field NAMES only. Batch of 1, so one record per run.\nconst r = $input.first().json;\nconst sa = String(r['Script_Approval'] || '').trim();\nconst fb = String(r['Script_Feedback'] || '').trim();\nconst rc = Number(r['Script_Revision_Count'] || 0);\nlet route = 'generate', mode = 'first', note = '', status = '';\nif (r['Production_Approval'] !== true) {\n  route = 'hold'; mode = 'unapproved'; note = 'Not approved for production: skipped'; status = 'Idea';\n} else if (sa === 'Revision Required' && rc >= 1) {\n  route = 'hold'; mode = 'second_rejection'; note = 'Manual edit needed'; status = 'Needs Review';\n} else if (sa === 'Revision Required' && fb) {\n  mode = 'regenerate';\n} else if (sa === 'Revision Required') {\n  route = 'hold'; mode = 'no_feedback'; note = 'Manual edit needed: Revision Required with empty Script_Feedback'; status = 'Needs Review';\n}\nconsole.log('[1e] ' + r.id + ' -> ' + route + ' / ' + mode);\nreturn [{ json: { ...r, route: route, mode: mode, gate_note: note, gate_status: status } }];"
+      },
+      "id": "1fe1b9da-41c4-467f-b6d5-2cf2820e0fb0",
+      "name": "1e. Approval Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4512,
+        -1872
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "isgen",
+              "leftValue": "={{ $json.route }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "generate"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "43c2314f-5d86-40b4-9712-90bc37a153df",
+      "name": "1f. Generate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4624,
+        -1872
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "id": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "4df22b30-594f-4a5f-bb93-bd61a39b2558",
+      "name": "1g. Fetch Notes (Hold)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        -2064
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-43 gate hold: no model call. Re-read notes, replace only the SCRIPT (WF04) block, set Status.\nconst fresh = $input.first().json || {};\nconst g = $('1e. Approval Check').first().json;\nconst f = (fresh.fields && typeof fresh.fields === 'object') ? fresh.fields : fresh;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = '==============================';\nconst STAGE_TAG = 'SCRIPT (WF04)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(STAGE_TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst prevBlock = ((freshNotes.match(blockRe) || [''])[0] || '').trim();\nconst notesBase = freshNotes.replace(blockRe, '').trim();\n\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\nlet block = sep + '\\n' + STAGE_TAG + '\\nUpdated: ' + stamp + '\\n' + g.gate_note;\nif (g.mode !== 'unapproved' && prevBlock) {\n  const prevBody = prevBlock.split('\\n').slice(2).filter(l => !/^(Triggered|Updated|Run time|Stage):/.test(l) && l.indexOf('Manual edit needed') !== 0).join('\\n').trim();\n  if (prevBody) block += '\\n\\n' + prevBody;\n}\nconst notesFinal = (notesBase ? notesBase + '\\n\\n' : '') + block;\n\nreturn [{ json: { record_id: g.id, gate_status: g.gate_status, mode: g.mode, reel_notes_final: notesFinal } }];"
+      },
+      "id": "61499489-2b36-46a7-a467-be7ba4923269",
+      "name": "1h. Build Hold Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5072,
+        -2064
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Status": "={{ $json.gate_status }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "1ba28544-05b0-4018-a4a2-059ae7ea3c5d",
+      "name": "1i. Update Hold",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        5296,
+        -2064
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-43: one automatic rewrite from the reviewer's feedback. Appends the previous script and Script_Feedback.\nconst p = $input.first().json;\nconst g = $('1e. Approval Check').first().json;\nlet prompt = p.prompt || '';\nif (g.mode === 'regenerate' && prompt) {\n  prompt += '\\n\\nREVISION REQUEST - NON-NEGOTIABLE:\\n'\n    + 'Rewrite this script applying the reviewer\\'s feedback. Keep the same skill, guardrails and JSON output format required above. '\n    + 'Address every point in the feedback and keep what the reviewer did not object to. You may keep the same hook family unless the feedback is about the hook.\\n\\n'\n    + 'PREVIOUS SCRIPT:\\n' + String(g['Script'] || '').trim()\n    + '\\n\\nREVIEWER FEEDBACK:\\n' + String(g['Script_Feedback'] || '').trim();\n}\nreturn [{ json: { ...p, prompt: prompt, mode: g.mode } }];"
+      },
+      "id": "39daa458-259b-4a80-a584-baf553984a82",
+      "name": "3a. Apply Revision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4960,
+        -1456
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "=AND(NOT({Hook_Family} = ''), NOT({Script_Generated_At} = ''), RECORD_ID() != '{{ $('1c. Batch of 1').first().json.id }}')",
+        "returnAll": false,
+        "limit": 5,
+        "options": {
+          "fields": [
+            "Hook_Family",
+            "Category",
+            "Script",
+            "Script_Review_Brief",
+            "Script_Generated_At"
+          ]
+        },
+        "sort": {
+          "property": [
+            {
+              "field": "Script_Generated_At",
+              "direction": "desc"
+            }
+          ]
+        }
+      },
+      "id": "7ab40d50-6796-4f93-bfaa-224106cfb092",
+      "name": "2b. Get Recent Hooks",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4736,
+        -1456
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appgBzSHGSK2v8B6g"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl12IsF6vUdPY60r"
+        },
+        "filterByFormula": "=AND(NOT({URL} = ''), {URL} = '{{ String($('1c. Batch of 1').first().json['Source URL'] || '').split('\\n')[0].trim().replace(/'/g, \"\\\\'\") }}')",
+        "returnAll": false,
+        "limit": 1,
+        "options": {
+          "fields": [
+            "URL",
+            "Transcript",
+            "Creator_Handle"
+          ]
+        }
+      },
+      "id": "d8ff61a0-2a0c-455a-afce-eb50a2f3a43d",
+      "name": "2c. Get Source Transcript",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        -1456
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-57 (16 Oct 2026): adds John's 4 example scripts per category (cleaned to v3) and each skill's own\n// QA checklist and review-brief items (verbatim) to the prompt built by node 3. Node 3 is unchanged.\nconst p = $input.first().json;\nlet prompt = String(p.prompt || '');\nconst EXAMPLES = [\n  'EXAMPLE A - \"One Missed Beam = One Lost Project\" (John\\'s template, cleaned). Matrix: Estimators | Steel Fabrication | #1 Manual takeoff errors | From Drawings to Estimate. Original about 45s in the older 5-part shape. Hook as written: Relatability (trade call-out + high-stakes consequence).',\n  'Scene 1 Hook (Initial Anticipation, ~4s) | Spoken: \"Steel fabricators: one missed beam specification in a 200-page structural PDF, and your margin on that job is gone.\" | Voice: calm, direct, serious | Motion: leans forward, focused | Visual: dark background, overlay \"One Missed Spec = Zero Margin\"',\n  'Scene 2 Problem (Loading + Rising Stakes, ~12s) | Spoken: \"You are pulling steel grades, beam lengths and connection types out of architectural and structural drawings by hand. One typo, one overlooked detail, and you are fabricating steel at a loss. And every hour spent copying numbers is an hour not spent winning the next bid.\" | Voice: steady, building tension | Motion: slow head shake | Visual: estimator scrolling a PDF, zooming into specs, typing into a spreadsheet',\n  'Scene 3 Demo (Rehook + Practical Payoff, ~18s) | Spoken: \"Imagine an enterprise AI agent that reads your structural drawings end to end. It picks out every beam, every connection type, every material specification, and keeps the context, so a W12x50 on one sheet is checked against the schedule on another. It prepares the quantities for your estimate, and your estimator reviews and approves them before anything goes out.\" | Voice: steady, informative, turning confident | Motion: open-hand gesture | Visual: upload drawings > reads specs > identifies beams and connections > prepares quantities > estimator review',\n  'Scene 4 Advantage (Practical Payoff, ~8s) | Spoken: \"It works alongside your existing estimating software. Your team keeps control of the numbers. The system does the reading and the checking.\" | Voice: warm, grounded | Motion: nods | Visual: overlays \"Reads the drawings\" > \"Your estimator approves\" > \"No rip-and-replace\"',\n  'Scene 5 CTA (~3s, hold 3s on screen) | Spoken: \"Want to see this workflow on a real drawing set? DM me STEEL and I will show you exactly how it works.\" | Voice: warm, inviting | Motion: relaxed smile | Visual: clean closing graphic, keyword on screen, no logo',\n  '',\n  'EXAMPLE B - \"The Quote That Costs You the Sale\" (John\\'s template, cleaned). Matrix: Flooring Contractors & Specialists | Timber Flooring | #27 waste and board-length calculations slowing quotes | AI Timber Quote Flooring Builder. Original about 40s, 5-part shape. Hook as written: Relatability.',\n  'Scene 1 Hook (Initial Anticipation, ~4s) | Spoken: \"Timber flooring contractors: your customer is waiting on a quote, and you are still working out waste factors and board lengths.\" | Voice: calm, direct, a little urgent | Motion: leans forward | Visual: dark background, overlay \"Speed = Sales\"',\n  'Scene 2 Problem (Loading + Rising Stakes, ~10s) | Spoken: \"Every quote is a manual calculation. Waste percentages, mixed board lengths, finishes, material costs. On a complex residential job it eats your evening. Meanwhile the customer calls the next contractor, and the job is gone before your quote lands.\" | Voice: steady, building frustration | Motion: head shake | Visual: contractor on the phone, impatient customer, another contractor\\'s van pulling up',\n  'Scene 3 Demo (Rehook + Practical Payoff, ~16s) | Spoken: \"Imagine an enterprise AI agent built for timber flooring. You enter the room dimensions, the board type and the finish. It works out the waste, accounts for every variable and prepares a detailed quote for you to check and send. Not a generic chatbot. A system that understands how timber flooring is actually priced.\" | Voice: informative, turning confident | Motion: open-hand gesture | Visual: room data > board type and finish > waste calculated > quote ready for review',\n  'Scene 4 Advantage (Practical Payoff, ~7s) | Spoken: \"Faster quotes, the same pricing logic for every rep, and it works with the tools you already use.\" | Voice: warm, grounded | Motion: nods | Visual: overlays \"Faster quotes\" > \"Consistent pricing\" > \"You approve every quote\"',\n  'Scene 5 CTA (~3s, hold 3s) | Spoken: \"Losing jobs to slow quotes? DM me FLOORING and I will show you how it works.\" | Voice: warm | Motion: smile | Visual: clean closing graphic, no logo',\n  '',\n  'EXAMPLE C - \"One Decimal Point Away from Disaster\" (John\\'s template, cleaned). FORMAT REFERENCE ONLY: the original names no trade, so it is not a valid 1:1:1:1 matrix; it was also branded with a URL CTA and unapproved accuracy and speed figures (all removed). Audience: Estimators | Pain #1 Manual takeoff errors. Hook as written: consequence-first (closest family: Curiosity or Relatability).',\n  'Scene 1 (~4s) | Spoken: \"One missed decimal point on a takeoff can wipe out the margin on the whole job.\" | Voice: calm, serious | Motion: leans forward | Visual: overlay \"One Decimal = Zero Margin\"',\n  'Scene 2 (~8s) | Spoken: \"Pulling quantities out of complex PDFs by hand is slow and easy to get wrong. Dozens of pages. Specs cross-checked line by line. Numbers typed into spreadsheets. One typo, one missed line item, and the bid is unprofitable before the project starts.\" | Visual: estimator scrolling a PDF and typing into a spreadsheet',\n  'Scene 3 (~9s) | Spoken: \"A governed AI workflow changes the first step. It reads the plans, identifies the line items and prepares the quantities for your pricing model, for your estimator to check.\" | Visual: PDF > extraction > quantities for review > pricing model',\n  'Scene 4 (~5s) | Spoken: \"It works with your existing estimating software. No rip-and-replace.\" | Visual: short overlays',\n  'Scene 5 (~4s) | Spoken: \"Want to see it on a real plan set? DM me ESTIMATE.\" | Visual: clean closing graphic, no logo',\n  '',\n  'EXAMPLE D - \"Stop Chasing RFIs\" (John\\'s template, cleaned). FORMAT REFERENCE ONLY: no trade, and RFI management (#13) is not solved by any of the four approved demos, so never produce this matrix; the original was branded and used unapproved figures (removed). Audience: Project Managers. Hook as written: consequence-first.',\n  'Scene 1 (~4s) | Spoken: \"Lost RFIs quietly push construction schedules back.\" | Voice: calm, direct | Motion: leans forward | Visual: overlay \"Lost RFIs = Schedule Delays\"',\n  'Scene 2 (~8s) | Spoken: \"Routing RFIs by hand. Chasing the architect for an answer. Updating the site team. One lost RFI holds up every task that depends on it, and the PM\\'s week goes into chasing status instead of running the job.\" | Visual: emails, texts and spreadsheets scattered on screen',\n  'Scene 3 (~10s) | Spoken: \"A governed workflow routes each RFI to the right person, tracks the response and flags it when it stalls, so the PM sees every open query in one place.\" | Visual: incoming RFI > route > track > flag > one view',\n  'Scene 4-5 | Spoken: \"It works with the tools you already use.\" then one keyword CTA. | Visual: clean closing graphic, no logo'\n].join('\\n');\n\nconst EXAMPLE_RULES = {\n  Product: [\n    'HOW TO USE THESE EXAMPLES (Product-themed):',\n    '- Examples A and B are the closest models: copy their trade-vocabulary density, the \"Imagine an enterprise AI agent that...\" framing, the generic-chatbot contrast, the explicit human review step, one keyword DM CTA, a clean closing graphic with no logo, and the per-scene voice direction, motion and visual notes.',\n    '- Examples C and D are format references for a consequence-first hook and step-by-step agitation only; they have no trade (C) or no approved demo (D).',\n    '- The examples use the older 5-part shape and run 30-45s. You must expand to the six beats: add a distinct Rising Stakes scene and a Rehook line before the demo (e.g. \"But here is what a generic tool still cannot see.\"), and land in 60-110 seconds.',\n    '- Do not copy their sentences, hooks, titles or keywords (STEEL, FLOORING, ESTIMATE). Your opening must not resemble any example opening. Pick your own matrix; prefer a trade/demo combination none of the examples or recent scripts used.',\n    '- Never put figures back in (no 10x, 99%, 40%, hours saved). The cleaned wording above is the standard.'\n  ].join('\\n'),\n  News: [\n    'HOW TO USE THESE EXAMPLES (News commentary): they are product-themed, so take the craft only:',\n    '- a first sentence that names one specific, concrete consequence or tension;',\n    '- the exact working vocabulary of the chosen viewer (as A and B use beam specs, connection types, waste factors);',\n    '- short spoken lines, one idea each, overlays shorter than the line;',\n    '- voice direction, motion and visual notes for every scene;',\n    '- a clean closing graphic with the CTA held on screen, no logo.',\n    'Do NOT take the product or demo pitch, the trade/pain/demo matrix, the \"enterprise AI agent\" solution framing or their keywords. News stays news-first, unbranded and attributed, with construction as the natural implication.'\n  ].join('\\n'),\n  Education: [\n    'HOW TO USE THESE EXAMPLES (Education lesson): they are product-themed, so take the craft only:',\n    '- a first sentence that names one specific, concrete situation without revealing the lesson;',\n    '- the exact working vocabulary of the chosen viewer (as A and B use beam specs, connection types, waste factors);',\n    '- short spoken lines, one idea each, overlays shorter than the line;',\n    '- voice direction, motion and visual notes for every scene;',\n    '- a clean closing graphic with the save/share/follow CTA held on screen, no logo.',\n    'Do NOT take the product or demo pitch, the trade/pain/demo matrix, the \"enterprise AI agent\" solution framing or their DM keywords. Education stays a lesson with a credible source and a save/share/follow CTA.'\n  ].join('\\n')\n};\n\n// T-57: each skill's own QA checklist and review-brief items, verbatim from John's skills v3, so qa_checklist is not model-invented.\nconst QA = {\n  News: ['Source was fully reviewed and claims were separated into fact, attribution, and interpretation.', 'The central gap is clear.', 'One primary audience lens is used.', 'One of the five hook families was selected based on topic and audience.', 'The previous hook family and phrasing were checked to avoid back-to-back repetition.', 'Initial anticipation creates an open question.', 'Loading adds evidence rather than filler.', 'Rising stakes explain why the story matters.', 'The rehook opens a meaningful second question.', 'The practical payoff resolves the open loops.', 'Editing changes visual state every 2-4 seconds and holds the rehook/payoff clearly.', 'Runtime is 60-90 seconds.', 'Construction connection is natural and not a forced product pivot.', 'No AlfredAI or product mention appears in the spoken script or public captions.', 'CTA is clear and aligned with any ManyChat keyword.', 'YouTube title, description, chapters, tags, thumbnail concept, and sources are included.', 'Manual review brief is included.'],\n  Education: ['One educational lesson is clear.', 'The common assumption is challenged.', 'A credible source or authority is included.', 'One hook family was selected based on topic and audience.', 'The previous hook family and phrasing were checked.', 'The hook creates curiosity without revealing the answer immediately.', 'Loading adds evidence and eliminates obvious answers.', 'Rising stakes explain why the lesson matters.', 'The rehook deepens curiosity rather than repeating the hook.', 'Practical payoff gives the viewer an actionable lesson.', 'Editing uses visual changes every 2-4 seconds and a clear pause before the reveal.', 'Runtime is 45-60 seconds.', 'No AlfredAI, product, demo, or sales pitch appears.', 'CTA is save/share/follow unless a keyword resource exists.', 'YouTube package is complete.', 'ManyChat is included only when applicable.', 'Manual review brief is included.'],\n  Product: ['Exactly one audience is named.', 'Exactly one approved trade is used.', 'Exactly one pain point is used.', 'Exactly one approved demo is used.', 'The selected demo directly solves the selected pain point.', 'The script and all public captions are unbranded.', 'No AlfredAI mention appears anywhere in customer-facing copy.', 'The hook names the audience or trade early.', 'Hook family was chosen based on topic and audience, not randomly.', 'Previous hook family and phrasing were checked.', 'Initial anticipation creates an open question.', 'Loading uses specific trade details.', 'Rising stakes show a credible consequence.', 'Rehook opens a second meaningful question.', 'Practical payoff explains the demo and governance boundary.', 'Human-in-the-loop is explicit.', 'Quantified claims are approved or removed.', 'Editing notes match what the demo can show.', 'Script is under two minutes.', 'YouTube package is complete.', 'ManyChat keyword matches the spoken CTA.', 'Manual review brief is included.']\n};\nconst REVIEW_ITEMS = {\n  News: ['Why the hook family fits the topic and audience', 'How each psychology beat is used', 'What facts and positions need checking', 'The unbranded and no-product-pitch checks', 'The exact CTA and keyword', 'The target runtime and pacing notes'],\n  Education: ['Why the hook family fits the lesson and audience', 'How the six psychology beats are used', 'Source and authority checks', 'No-product and unbranded checks', 'CTA and runtime checks', 'Editing and readability checks'],\n  Product: ['1:1:1:1 verification', 'Hook family rationale and previous-hook check', 'Psychology-beat review', 'Demo-to-pain alignment', 'Human-in-the-loop and data-governance check', 'Unbranded check', 'Runtime and editing check', 'CTA and ManyChat alignment', 'Claims and quantified-impact verification']\n};\nconst skill = p.skill || 'News';\nconst QA_BLOCK = [\n  'QUALITY CHECKLIST: qa_checklist must contain exactly these ' + QA[skill].length + ' items, in this order, with the item text unchanged; set pass honestly and add a note for any fail:',\n  QA[skill].map((q, i) => (i + 1) + '. ' + q).join('\\n'),\n  '',\n  'MANUAL REVIEW BRIEF: review_brief must cover each of these. Use the existing keys: rationale in hook_rationale, beats in beats, facts/sources/matrix in checks, unbranded, 1:1:1:1, demo-to-pain, human-in-the-loop, data governance and claims in guardrail_checks, CTA/keyword/ManyChat in cta, runtime, pacing, editing and readability in runtime_pacing:',\n  REVIEW_ITEMS[skill].map(r => '- ' + r).join('\\n'),\n  '',\n  'OUTPUT CHECKS (non-negotiable):',\n  '- ManyChat: set manychat.applicable to true only if the CTA scene\\'s spoken copy says the exact keyword (e.g. \"Comment KEYWORD\" or \"DM me KEYWORD\") and manychat.keyword is that same word. A plain \"tell me in the comments\" CTA has no keyword: set applicable to false.',\n  '- youtube.description: never write the words \"Show more\"; the first two lines must stand alone as the hook and the promise.',\n  skill === 'Product' ? '- The trade is named in the first spoken sentence.' : '- The construction connection is spoken (in Rising Stakes or Practical Payoff), not only shown in visuals.',\n  '- Every qa_checklist pass value must be true only if the script actually meets it; a false pass is worse than an honest fail.'\n].join('\\n');\nconst EXAMPLE_BLOCK = 'REFERENCE EXAMPLE SCRIPTS (John\\'s product-themed templates, cleaned to v3):\\n' + EXAMPLES + '\\n\\n' + EXAMPLE_RULES[skill];\n\nconst put = (txt, marker, block) => { const i = txt.indexOf(marker); return i >= 0 ? txt.slice(0, i) + block + '\\n\\n' + txt.slice(i) : txt + '\\n\\n' + block; };\nprompt = prompt.replace(\"SPOKEN COPY: each scene\", \"SCENE NOTES: every scene carries voice_direction, motion and a visual note (as in the reference examples), whatever the skill.\\nSPOKEN COPY: each scene\");\nconst firstInput = prompt.indexOf('STRUCTURAL REFERENCE ONLY') >= 0 ? 'STRUCTURAL REFERENCE ONLY' : 'TOPIC: ';\nprompt = put(prompt, firstInput, EXAMPLE_BLOCK);\nprompt = put(prompt, 'OUTPUT: return ONE valid JSON object', QA_BLOCK);\nreturn [{ json: { ...p, prompt: prompt, qa_expected: QA[skill].length, examples_added: true } }];\n"
+      },
+      "id": "fd980fc8-4c3a-4abb-a960-bca52b0f02b2",
+      "name": "3b. Add Examples + QA (T-57)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5072,
+        -1296
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "1. Get Ready for Script Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. Get Ready for Script Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Ready for Script Records": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "1c. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Batch of 1": {
+      "main": [
+        [
+          {
+            "node": "All Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1d. Wait 5s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Generate Script (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "5. Preserve Data + Extract Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2s Before Update": {
+      "main": [
+        [
+          {
+            "node": "6. Update Reel Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Update Reel Engine": {
+      "main": [
+        [
+          {
+            "node": "1c. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Preserve Data + Extract Script": {
+      "main": [
+        [
+          {
+            "node": "5z. Fetch Existing Reel Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5z. Fetch Existing Reel Notes": {
+      "main": [
+        [
+          {
+            "node": "5y. Build Script Notes Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5y. Build Script Notes Block": {
+      "main": [
+        [
+          {
+            "node": "Wait 2s Before Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1d. Wait 5s": {
+      "main": [
+        [
+          {
+            "node": "1e. Approval Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1e. Approval Check": {
+      "main": [
+        [
+          {
+            "node": "1f. Generate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1f. Generate?": {
+      "main": [
+        [
+          {
+            "node": "2. Get Viral Patterns & Transcripts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1g. Fetch Notes (Hold)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1g. Fetch Notes (Hold)": {
+      "main": [
+        [
+          {
+            "node": "1h. Build Hold Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1h. Build Hold Update": {
+      "main": [
+        [
+          {
+            "node": "1i. Update Hold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1i. Update Hold": {
+      "main": [
+        [
+          {
+            "node": "1c. Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3a. Apply Revision": {
+      "main": [
+        [
+          {
+            "node": "4. Generate Script (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Get Viral Patterns & Transcripts": {
+      "main": [
+        [
+          {
+            "node": "2b. Get Recent Hooks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Get Recent Hooks": {
+      "main": [
+        [
+          {
+            "node": "2c. Get Source Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Get Source Transcript": {
+      "main": [
+        [
+          {
+            "node": "3. Build Viral-Aware Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Build Viral-Aware Prompt": {
+      "main": [
+        [
+          {
+            "node": "3b. Add Examples + QA (T-57)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Add Examples + QA (T-57)": {
+      "main": [
+        [
+          {
+            "node": "3a. Apply Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "63b31456-80d7-4bbd-aa8d-f554ba35333a",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "8eaXZ3ZnWxjbrrs2",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

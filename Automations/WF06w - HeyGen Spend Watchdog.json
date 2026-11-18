@@ -1,0 +1,396 @@
+{
+  "name": "WF06w - HeyGen Spend Watchdog",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "061df4c1-6cbf-43c0-87c4-a66269e0cb4a",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', NOT({Video_Base_ID}=''))",
+        "options": {}
+      },
+      "id": "14051b66-5f05-4caf-9caa-570a454ab8d2",
+      "name": "1. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        224,
+        96
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.Video_Base_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "=OR(AND({HeyGen_Submitted_At}, DATETIME_FORMAT(SET_TIMEZONE({HeyGen_Submitted_At}, '{{ $json.Timezone || \"Asia/Manila\" }}'), 'YYYY-MM-DD') = '{{ $now.setZone($json.Timezone || \"Asia/Manila\").toFormat(\"yyyy-MM-dd\") }}'), AND({Status} = 'Video Processing', {HeyGen_Video_ID} = ''))",
+        "options": {}
+      },
+      "id": "85874bfa-ef54-4d90-9bf2-d07825250e45",
+      "name": "2. Get Today Submits + Open Locks",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// HG-2 watchdog. Reads what WF06 wrote (HeyGen_Submitted_At, HeyGen_ID_History) and decides whether to alert.\nconst STALE_MIN = 20;\nconst WPM = 150;                 // speaking rate used to estimate video length from the script\nconst COST_PER_MIN_USD = 6;      // assumed HeyGen API rate per minute of video. Estimate only; change here if the real rate differs.\nconst TABLE = 'tblSBKG2Zx2nZUPIT';\nconst N8N = 'https://marketing.alfredai.bot/workflow/';\nconst NL = String.fromCharCode(10);\nconst SEP = '==============================';\nconst TAG = 'AVATAR (WF06)';\nconst clients = $('1. Load Clients').all().map(i => i.json);\nconst sel = v => (v && typeof v === 'object') ? (v.name || '') : (v || '');\nconst dayOf = (iso, tz) => { const d = DateTime.fromISO(String(iso || '')); return d.isValid ? d.setZone(tz).toFormat('yyyy-MM-dd') : ''; };\nconst stripBlock = notes => { const head = SEP + NL + TAG; let s = String(notes || ''); let i = s.indexOf(head); while (i >= 0) { const j = s.indexOf(NL + SEP + NL, i + head.length); s = s.slice(0, i).trimEnd() + (j >= 0 ? s.slice(j) : ''); i = s.indexOf(head); } return s.trim(); };\nconst estSecs = script => { const w = String(script || '').split(' ').filter(x => x.trim().length > 0).length; return w > 0 ? Math.round(w / WPM * 60) : 0; };\nconst usd = secs => '$' + (secs / 60 * COST_PER_MIN_USD).toFixed(2);\nconst mmss = sec => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');\nconst recUrl = (baseId, id) => 'https://airtable.com/' + baseId + '/' + TABLE + '/' + id;\nconst hgUrl = id => 'https://app.heygen.com/videos/' + id;\n\n// Rows arrive from the client loop, each stamped with _client by 2b.\nconst by = {};\nfor (const it of $input.all()) { const j = it.json || {}; const k = j._client || ''; (by[k] = by[k] || []).push(j); }\n\nconst store = $getWorkflowStaticData('global');\nstore.sent = store.sent || {};\nconst cutoff = DateTime.now().minus({ days: 3 }).toFormat('yyyy-MM-dd');\nfor (const key of Object.keys(store.sent)) { if (key.slice(0, 10) < cutoff) delete store.sent[key]; }\nconst fresh = (key, value) => { if (store.sent[key] === value) return false; store.sent[key] = value; return true; };\n\nconst sections = [];\nconst table = [];\nconst stale = [];\nlet capTotal = 0;\nlet submitTotal = 0;\nlet extraSecsTotal = 0;\n\nclients.forEach((c, k) => {\n  const name = c.Client_Name || ('client ' + k);\n  const tz = c.Timezone || 'Asia/Manila';\n  const baseId = c.Video_Base_ID || '';\n  const cap = (typeof c.Daily_Video_Cap === 'number' && c.Daily_Video_Cap >= 0) ? Math.floor(c.Daily_Video_Cap) : 3;\n  const today = DateTime.now().setZone(tz).toFormat('yyyy-MM-dd');\n  const rows = by[name] || [];\n  const out = [];\n  const err = rows.find(r => r && r.error);\n  if (err) {\n    const msg = String((err.error && err.error.message) || err.error).substring(0, 200);\n    table.push(name + ': could not be read');\n    if (fresh(today + '|' + name + '|readerror', msg)) {\n      out.push(['PROBLEM: this brand cannot be read', 'What it means: the watchdog could not open the Reel Engine table, so this brand is not being watched. WF06 Global also submits nothing for it.', 'What to do: check that the base has the fields HeyGen_Submitted_At and HeyGen_ID_History and that the Airtable token can open it.', 'Error: ' + msg, 'Base: https://airtable.com/' + baseId].join(NL + '  '));\n    }\n  } else {\n    let submits = 0;\n    let secsToday = 0;\n    let reelsToday = 0;\n    for (const r of rows) {\n      if (!r || !r.id) continue;\n      const status = String(sel(r.Status));\n      const vid = String(r.HeyGen_Video_ID || '').trim();\n      const topic = r.Topic || r.id;\n      const secs = estSecs(r.Script);\n      const hist = String(r.HeyGen_ID_History || '').split(NL).map(l => l.trim()).filter(Boolean);\n      const histToday = hist.filter(l => dayOf(l.split('|')[0].trim(), tz) === today).length;\n      const submittedToday = dayOf(r.HeyGen_Submitted_At, tz) === today;\n      if (submittedToday) { const n = Math.max(histToday, (vid || status === 'Video Processing') ? 1 : 0); submits += n; if (n > 0) { secsToday += secs * n; reelsToday += n; } }\n      if (hist.length >= 2 && histToday >= 1 && fresh(today + '|' + name + '|double|' + r.id, hist.length)) {\n        const extra = hist.length - 1;\n        extraSecsTotal += secs * extra;\n        const idLines = hist.map(l => { const p = l.split('|'); const id = (p[1] || '').trim(); return '    ' + (p[0] || '').trim() + '  ' + id + (id ? '  ' + hgUrl(id) : ''); });\n        out.push(['PROBLEM: a reel was rendered more than once', 'Reel: ' + topic, 'Record: ' + recUrl(baseId, r.id), 'HeyGen renders (' + hist.length + '):'].join(NL + '  ') + NL + idLines.join(NL) + NL + '  ' + ['Estimated cost of the extra ' + extra + ' render(s): ' + (secs > 0 ? usd(secs * extra) + ' (about ' + mmss(secs) + ' each)' : 'unknown, the record has no script'), 'What it means: this is the 29 Sep bug pattern, or someone cleared HeyGen_Video_ID and sent the reel again by hand.', 'What to do: open the record. If nobody re-sent it on purpose, unpublish WF06 and raise it. Keep one render, ignore the rest.'].join(NL + '  '));\n      }\n      if (status === 'Video Processing' && !vid) {\n        const at = DateTime.fromISO(String(r.HeyGen_Submitted_At || ''));\n        const ageMin = at.isValid ? Math.round((Date.now() - at.toMillis()) / 60000) : null;\n        if (ageMin === null || ageMin >= STALE_MIN) {\n          const stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\n          const block = [SEP, TAG, 'Updated: ' + stamp, 'Stage: Error - locked with no HeyGen ID', 'Detail: The record was locked for HeyGen but no video ID was written' + (ageMin === null ? '' : ' after ' + ageMin + ' minutes') + '. Check HeyGen for a render of this reel before setting Status back to Ready for Video Generation.'].join(NL);\n          const base = stripBlock(r.Reel_Notes);\n          stale.push({ base_id: baseId, record_id: r.id, reel_notes_final: (base ? base + NL + NL : '') + block });\n          out.push(['PROBLEM: a reel got stuck and was set to Failed', 'Reel: ' + topic, 'Record: ' + recUrl(baseId, r.id), 'Locked: ' + (ageMin === null ? 'time unknown' : ageMin + ' minutes ago') + ', no HeyGen ID was written', 'Possible cost: ' + (secs > 0 ? 'up to ' + usd(secs) + ' if HeyGen did render it' : 'unknown, the record has no script'), 'What it means: the run stopped between locking the reel and saving the HeyGen ID. HeyGen may hold a paid render that was never collected.', 'What to do: look for this reel in HeyGen (https://app.heygen.com). If it is there, paste its ID into HeyGen_Video_ID and set Status to Video Processing. If not, set Status back to Ready for Video Generation.'].join(NL + '  '));\n        }\n      }\n    }\n    capTotal += cap;\n    submitTotal += submits;\n    table.push(name + ': ' + submits + ' of ' + cap + (submits > cap ? '  OVER CAP' : ''));\n    if (submits > cap && fresh(today + '|' + name + '|overcap', submits)) {\n      const over = submits - cap;\n      const avg = reelsToday > 0 ? Math.round(secsToday / reelsToday) : 0;\n      extraSecsTotal += avg * over;\n      out.push(['PROBLEM: over the daily cap', 'Submits today: ' + submits + ', cap is ' + cap + ' (' + over + ' over)', 'Estimated cost of the ' + over + ' extra render(s): ' + (avg > 0 ? usd(avg * over) + ' (about ' + mmss(avg) + ' each)' : 'unknown'), 'What it means: the cap in WF06 was bypassed. Either two runs overlapped, or videos were sent to HeyGen outside WF06.', 'What to do: check which reels were sent today in the base. If it keeps climbing, unpublish WF06 and raise it.', 'Base: https://airtable.com/' + baseId + '/' + TABLE].join(NL + '  '));\n    }\n  }\n  if (out.length) sections.push(name + NL + out.map(l => '- ' + l).join(NL + NL));\n});\n\nconst send = sections.length > 0;\nconst subject = 'HeyGen alert: ' + submitTotal + ' submits today against a cap total of ' + capTotal;\nconst body = send ? [\n  'HeyGen spend watchdog (WF06w). Something needs a look.',\n  '',\n  sections.join(NL + NL),\n  '',\n  'TODAY, ALL BRANDS (submits of daily cap)',\n  table.map(l => '  ' + l).join(NL),\n  '  Total: ' + submitTotal + ' of ' + capTotal,\n  '',\n  'ESTIMATED EXTRA COST IN THIS ALERT: ' + (extraSecsTotal > 0 ? usd(extraSecsTotal) : '$0.00') + '  (script length at ' + WPM + ' words per minute, assumed $' + COST_PER_MIN_USD + ' per minute of video; an estimate, not the HeyGen bill)',\n  '',\n  'LINKS',\n  '  WF06 AlfredAI: ' + N8N + 'wnsZb16pGKHeVLIg',\n  '  WF06 Global: ' + N8N + 'rXq5PGyeHbA0oatk',\n  '  This watchdog: ' + N8N + '22elUM8m8rNHaJAy',\n  '  HeyGen: https://app.heygen.com',\n  '',\n  'Each problem is emailed once per day unless its count goes up. No email means nothing is wrong.'\n].join(NL) : '';\nreturn [{ json: { send, subject, body, stale, submit_total: submitTotal, cap_total: capTotal } }];"
+      },
+      "id": "622f853e-d08b-4716-9c37-076ca7ed02e9",
+      "name": "3. Evaluate + Dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "send",
+              "leftValue": "={{ $json.send }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c2ced3e1-fdf0-4404-aa92-0dc04c5a2a69",
+      "name": "4. Anything To Report?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "elle.c@alfredai.bot",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0b056c06-7515-4af5-b4b5-d2213e5a6623",
+      "name": "5. Send Alert Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        0
+      ],
+      "webhookId": "7d7cdebf-2709-4b6b-82c0-3f1e157cc6ab",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "OmCGA4GM1R1OV87i",
+          "name": "Gmail account (Elle)"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "0feb29dd-562e-4dd4-8cf7-162cc8e73eae",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const list = ($input.first().json.stale || []);\nreturn list.map(s => ({ json: s }));"
+      },
+      "id": "b77dca6b-d8f7-4f4f-a9f3-c2bd6cf65da5",
+      "name": "6. Split Stale Locks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Status": "Failed",
+            "Reel_Notes": "={{ $json.reel_notes_final }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "5cda3ae4-a428-4add-9045-53261efa288f",
+      "name": "7. Stale Lock - Set Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "1b5666cd-1158-4a91-9be5-a55b2d8fa1f7",
+      "name": "1b. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        336,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('1b. Client Loop').first(1).json;\nconst rows = $input.all().map(i => i.json || {});\nconst out = rows.filter(r => r.id || r.error).map(r => ({ json: { ...r, _client: c.Client_Name } }));\nif (!out.length) out.push({ json: { _client: c.Client_Name, _empty: true } });\nreturn out;"
+      },
+      "id": "13c6236e-ee49-48f6-b13f-2d0407243082",
+      "name": "2b. Tag Client",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        160
+      ],
+      "notes": "Stamps each row with its client so the evaluation never depends on item pairing."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "1. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Evaluate + Dedupe": {
+      "main": [
+        [
+          {
+            "node": "4. Anything To Report?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "6. Split Stale Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Anything To Report?": {
+      "main": [
+        [
+          {
+            "node": "5. Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Split Stale Locks": {
+      "main": [
+        [
+          {
+            "node": "7. Stale Lock - Set Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "1b. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "3. Evaluate + Dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2. Get Today Submits + Open Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Get Today Submits + Open Locks": {
+      "main": [
+        [
+          {
+            "node": "2b. Tag Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Tag Client": {
+      "main": [
+        [
+          {
+            "node": "1b. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "0ad46901-65a7-4a0e-b1ab-99be93fed781",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "22elUM8m8rNHaJAy",
+  "tags": []
+}

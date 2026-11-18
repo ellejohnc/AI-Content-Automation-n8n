@@ -1,0 +1,977 @@
+{
+  "name": "WF06c - Production Brief (Global)",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "BRoll_Generated": "={{ $json.broll_generated }}",
+            "BRoll_Reference": "={{ $json.broll_reference }}",
+            "Cutting_Technique": "={{ $json.cutting_technique }}",
+            "Hook_Video_Brief": "={{ $json.hook_video_brief }}",
+            "Music_BGM": "={{ $json.music_bgm }}",
+            "Priority_Score": 0,
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Screenshots_Needed": "={{ $json.screenshots_needed }}",
+            "Sound_Effects": "={{ $json.sound_effects }}",
+            "Soundbite": "={{ $json.soundbite }}",
+            "Status": "B-Roll Idea Done",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "13cc502c-17f9-4363-a75a-78c6fb4ab114",
+      "name": "7. Save Production Brief",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        7536,
+        -4736
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "={{ 'RECORD_ID()=\"' + $json.record_id + '\"' }}",
+        "options": {}
+      },
+      "id": "83e1e98c-bfae-422e-8bb1-fe3c33defcde",
+      "name": "6b. Fetch Existing Reel Notes",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        7088,
+        -4912
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const briefData = $('4. Parse Production Brief').item.json;\nreturn { json: { ...briefData, screenshot_sources: '' } };"
+      },
+      "id": "024ed7a5-b624-46d9-8c9d-675277577f1c",
+      "name": "5d. No Screenshots — Skip",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6864,
+        -4816
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const briefData = $('4. Parse Production Brief').item.json;\nlet sourcesText = '';\ntry {\n  const response = $input.item.json;\n  let raw = response.choices[0].message.content || '';\n  raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();\n  const sources = JSON.parse(raw);\n  if (Array.isArray(sources) && sources.length > 0) {\n    sourcesText = sources.map((s, i) => {\n      let line = `${i+1}. ${s.screenshot || ''}\\n`;\n      line += `   Source: ${s.source_name || ''}\\n`;\n      if (s.source_url) line += `   URL: ${s.source_url}\\n`;\n      if (s.search_query) line += `   Search: ${s.search_query}`;\n      return line;\n    }).join('\\n\\n');\n  }\n} catch(e) {\n  sourcesText = 'Could not resolve screenshot sources.';\n}\nreturn { json: { ...briefData, screenshot_sources: sourcesText } };"
+      },
+      "id": "7429ae71-ba58-4c69-b4bc-2561a456bdba",
+      "name": "5c. Parse Screenshot Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6864,
+        -5008
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (function(){ const cfg = $json.cfg || {}; const sc = (cfg.production_brief || {}).screenshot || {}; const sys = sc.system_prompt || 'You are a research assistant for a video production team. Given a list of screenshots needed for a video, identify the best real-world source where each screenshot can be obtained. Return ONLY valid JSON — no markdown, no explanation, no code fences.'; const tpl = sc.user_prompt_template || 'The following screenshots are needed for a video:\\n\\n{{screenshots}}\\n\\nFor each screenshot, identify the best publicly accessible source.\\n\\nReturn a JSON array of objects with these exact keys:\\n{\\n  \"screenshot\": \"description of the screenshot needed\",\\n  \"source_name\": \"name of the source (e.g. Statista, Reuters, WHO, TechCrunch)\",\\n  \"source_url\": \"direct URL if known, otherwise empty string\",\\n  \"search_query\": \"exact Google search query to find this specific data or graphic\"\\n}\\n\\nOnly include real, publicly accessible sources.'; const usr = tpl.split('{{screenshots}}').join($json.screenshots_needed || ''); return JSON.stringify({ model: sc.model || 'gpt-4.1-mini', messages: [ { role: 'system', content: sys }, { role: 'user', content: usr } ], temperature: (sc.temperature !== undefined && sc.temperature !== null) ? sc.temperature : 0.3, max_tokens: sc.max_tokens || 1000 }); })() }}",
+        "options": {}
+      },
+      "id": "9dfdd236-bb14-4ccb-a3ea-e1b629836235",
+      "name": "5b. Find Screenshot Sources",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6640,
+        -5008
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "x9t1HtZVkPLKi1dp",
+          "name": "OpenAI Bearer Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "screenshots-check",
+              "leftValue": "={{ ($json.screenshots_needed || '').trim().length }}",
+              "operator": {
+                "operation": "gt",
+                "type": "number"
+              },
+              "rightValue": 0
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "ab438a53-3a54-49a9-be83-ba44cdd814b7",
+      "name": "5. Has Screenshots Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6416,
+        -4912
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $input.item.json;\nconst sourceData = $('2. Extract Record Data').item.json;\nconst cfg = sourceData.cfg || {};\nconst pb = cfg.production_brief || {};\nlet raw = '';\ntry { raw = response.choices[0].message.content || ''; } catch(e) { raw = ''; }\nraw = raw.replace(/```json/g, '').replace(/```/g, '').trim();\nlet brief = {};\ntry { brief = JSON.parse(raw); } catch(e) { brief = { parse_error: 'Failed: ' + raw.substring(0, 200) }; }\n\nconst cueOf = (x) => x.cue || x.cue_point || x.timestamp || x.time || x.start || '';\nconst cueEndOf = (x) => x.cue_end || x.end || x.timestamp_end || '';\nconst noteOf = (x) => x.reason || x.description_note || x.note || x.purpose || '';\n\nconst fmtCued = (arr, labelKeys) => {\n  if (!Array.isArray(arr)) return String(arr || '');\n  return arr.map((x, i) => {\n    if (typeof x === 'string') return `${i+1}. ${x}`;\n    if (typeof x === 'object' && x !== null) {\n      let label = '';\n      for (const k of labelKeys) { if (x[k]) { label = x[k]; break; } }\n      if (!label) { label = Object.entries(x).filter(([k]) => ['cue','cue_point','timestamp','time','start','cue_end','end','timestamp_end','reason','note','purpose'].indexOf(k) === -1).map(([k,v]) => `${k}: ${v}`).join(' | '); }\n      const c = cueOf(x);\n      const ce = cueEndOf(x);\n      let range = '';\n      if (c && ce) range = ` at ${c}-${ce}`;\n      else if (c) range = ` at ${c}`;\n      const note = noteOf(x);\n      let line = `${label}${range}`;\n      if (note) line += ` \\u2014 ${note}`;\n      return `${i+1}. ${line}`;\n    }\n    return `${i+1}. ${x}`;\n  }).join('\\n');\n};\n\nconst fmtMusic = (arr) => {\n  if (!Array.isArray(arr)) return String(arr || '');\n  return arr.map((x, i) => {\n    if (typeof x === 'string') return `${i+1}. ${x}`;\n    if (typeof x === 'object' && x !== null) {\n      const variant = x.variant || x.name || x.title || '';\n      const part = x.part ? ` (${x.part})` : '';\n      const c = cueOf(x);\n      const at = c ? ` starts at ${c}` : '';\n      const prompt = x.prompt || '';\n      return `${i+1}. ${variant}${part}${at}\\n${prompt}`;\n    }\n    return `${i+1}. ${String(x)}`;\n  }).join('\\n\\n');\n};\n\nconst fmtSfx = (arr) => {\n  if (!Array.isArray(arr)) return String(arr || '');\n  return arr.map((x, i) => {\n    if (typeof x === 'string') return `${i+1}. ${x}`;\n    if (typeof x === 'object' && x !== null) {\n      const n = x.sound || x.name || x.effect || '';\n      const c = cueOf(x);\n      const dsc = noteOf(x);\n      let l = n;\n      if (c) l += ` at ${c}`;\n      if (dsc) l += ` \\u2014 ${dsc}`;\n      return `${i+1}. ${l || JSON.stringify(x)}`;\n    }\n    return `${i+1}. ${x}`;\n  }).join('\\n');\n};\n\nconst ct = brief.cutting_technique || {};\nconst ctLine = (label, v) => {\n  if (typeof v === 'string') return `${label}: ${v}`;\n  if (v && typeof v === 'object') {\n    const c = cueOf(v);\n    const t = v.technique || v.description || v.note || '';\n    return `${label}${c ? ` at ${c}` : ''}: ${t}`;\n  }\n  return `${label}: `;\n};\nconst cuttingText = [\n  ctLine('Hook \\u2192 Main', ct.hook_to_main),\n  ctLine('Main \\u2192 Pain', ct.main_to_pain),\n  ctLine('Pain \\u2192 Solution', ct.pain_to_solution),\n  ctLine('Solution \\u2192 CTA', ct.solution_to_cta)\n].join('\\n');\n\nreturn { json: {\n  cfg: cfg,\n  record_id: sourceData.record_id,\n  heygen_video_id: sourceData.heygen_video_id,\n  screenshots_needed: fmtCued(brief.screenshots_needed, ['screenshot','description','item']),\n  screenshots_needed_raw: sourceData.screenshots_needed || '',\n  broll_generated: fmtCued(brief.broll_generated, ['description','broll','footage','item']),\n  broll_reference: fmtCued(brief.broll_reference, ['query','search_query','reference','item']),\n  hook_video_brief: brief.hook_video_brief || '',\n  sound_effects: fmtSfx(brief.sound_effects),\n  music_bgm: fmtMusic(brief.music_bgm),\n  cutting_technique: cuttingText,\n  soundbite: brief.soundbite || pb.soundbite_default || 'agent done for you by Alfred Ai',\n  content_type: sourceData.content_type,\n  platform: sourceData.platform\n} };"
+      },
+      "id": "00a2f499-6334-42e8-82da-240aef1d7dcf",
+      "name": "4. Parse Production Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6192,
+        -4912
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.brief_body }}",
+        "options": {}
+      },
+      "id": "d21f4989-2294-454d-afc6-7ed0bd164d0a",
+      "name": "3. Generate Production Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5968,
+        -4912
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "x9t1HtZVkPLKi1dp",
+          "name": "OpenAI Bearer Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\nreturn { json: { cfg: item.cfg || {}, record_id: item.id || '', topic: item['Topic'] || '', script: item['Script'] || '', screenshots_needed: item['Screenshots_Needed'] || '', content_type: item['Content Type'] || 'Video', platform: item['Platform'] || 'YouTube', heygen_video_id: item['HeyGen_Video_ID'] || '', category: item['Category'] || 'Other' } };"
+      },
+      "id": "470890cf-6380-4a4e-819b-d7bebb56676a",
+      "name": "2. Extract Record Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        -4912
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasrec",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "40f542a7-f104-459c-8e53-26a82727b290",
+      "name": "1b. Any to Process?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5296,
+        -4912
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "{Status} = 'Ready for B-Roll Idea'",
+        "options": {}
+      },
+      "id": "c841dc73-05cf-4a28-b85d-7e76f4358cef",
+      "name": "1. Get Records Needing Brief",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        -4912
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "b36c228b-7dee-49d3-9bed-447388ab7abf",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        3728,
+        -4736
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "0d476b41-de17-4ae5-aaab-88606ad7560f",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        3728,
+        -4544
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\nconst cfg = d.cfg || {};\nconst pb = cfg.production_brief || {};\n\nconst WPM = pb.wpm || 150;\nconst SFX = pb.sfx_vocabulary || 'digital_readout, whoosh, impact, riser, ding, air_hit, keyboard, mouse_click, double_click, notification, camera_shutter, digital_shutter';\nconst SOUNDBITE = pb.soundbite_default || 'agent done for you by Alfred Ai';\nconst SONIC_DNA = pb.sonic_dna || 'LOCKED SONIC DNA across both parts: key of A minor; warm and dark authoritative tone, never bright or harsh; warm spectral character focused in the 1500-2000 Hz range; deep, present, grounding bass; smooth warm synth melody over rich sustained atmospheric pads; punchy four-on-the-floor kick drum with crisp hi-hats; subtle industrial/construction textures (distant metallic clinks, rhythmic mechanical pulses) blended smoothly into the beat, never overpowering; spacious midrange left clear for voiceover narration; clean professional studio mix with no distortion. TEMPO STRUCTURE: Part 1 sits at 120 BPM. Part 2 begins with a smooth intentional 2-3 second tempo ramp from 120 to 140 BPM at the transition point, then holds 140 BPM. Part 1 must build gradually toward the transition. Part 2 must build to a powerful climax near the end, then fade out gradually and smoothly over the final 1-2 seconds. Part 1 intensity rules - News: moderate intensity, establish the hook, build anticipation. Education: intellectual understated pulse, warm pads lead, clarifying feel. Product: sparse minimal arrangement, deep gentle bass, subtle UI textures, effortless automation feel. Part 2 intensity rules - News: high intensity, punchier drum transients, pronounced construction/metallic textures, forward-leaning urgent action-oriented momentum. Education: deeper grounded feel, more resonant pads, construction-industry-specific sonic texture. Product: energetic tech-forward, prominent celebratory lead synth, rhythmic integrated mechanical textures. Every prompt must begin with \"Instrumental only, no vocals.\" and end with \"Keep the tone warm and dark, not bright or harsh; keep the bass deep and present, not thin; no electric guitars, no acoustic drums, no orchestral strings or horns, no chaotic or erratic tempo changes; drums punchy but never overwhelming the voiceover.\"';\n\nconst P = [];\nP.push('You are creating a production brief for a ' + d.content_type + ' video for ' + d.platform + '.');\nP.push('');\nP.push('TOPIC: ' + d.topic);\nP.push('CATEGORY: ' + d.category);\nP.push('');\nP.push('FINAL SCRIPT:');\nP.push(d.script);\nP.push('');\nP.push('TIMING RULES (mandatory - every cue must be computed from the script, never guessed):');\nP.push('- Assume the voiceover is read at ' + WPM + ' words per minute.');\nP.push('- To time any sentence: count the words that appear before it in the script, then cue = round(words_before / ' + WPM + ' * 60) seconds, formatted m:ss.');\nP.push('- Total script duration = round(total_words / ' + WPM + ' * 60) seconds. No cue may exceed it.');\nP.push('- Format every timestamp as m:ss, e.g. 0:07 or 1:24. Never seconds-only, never a range inside a single cue field.');\nP.push('- Within each list, cues must ascend and must not repeat.');\nP.push('- Every cue must land on the moment in the script the item actually supports. Anchor it to a specific sentence.');\nP.push('');\nP.push('Generate a complete production brief as a JSON object with these exact keys:');\nP.push('');\nP.push('{');\nP.push('  \"screenshots_needed\": [list of objects, each with \"screenshot\" (specific description of the screenshot), \"cue\" (m:ss where it appears on screen), \"reason\" (one sentence on what point in the script it supports)],');\nP.push('  \"broll_generated\": [list of 3-5 objects, each with \"description\" (the b-roll footage to source or generate), \"cue\" (m:ss where the clip starts), \"cue_end\" (m:ss where the clip ends), \"reason\" (one sentence on the script moment it covers)],');\nP.push('  \"broll_reference\": [list of 3-5 objects, each with \"query\" (a stock-footage search query for matching visual style), \"cue\" (m:ss), \"cue_end\" (m:ss). Index-align these to broll_generated: entry N here must reference the same moment as entry N there, with the same cue and cue_end],');\nP.push('  \"hook_video_brief\": \"4-second opening hook direction, covering 0:00 to 0:04\",');\nP.push('  \"sound_effects\": [list of objects - each must use \"sound\" (must be exactly one of: ' + SFX + '), \"cue\" (m:ss), and \"reason\" (one sentence on why this sound fits this moment)],');\nP.push('  \"music_bgm\": [Two objects - one for Part 1 (opening, 0-40% of video) and one for Part 2 (transition, 40-100% of video). Each object must have exactly these keys: \"variant\": MUST be set using the CATEGORY field provided above. Format exactly as \"[CATEGORY] - Part 1 (120 BPM)\" for Part 1 and \"[CATEGORY] - Part 2 (140 BPM)\" for Part 2. Do NOT infer the category from the script content. Use only the CATEGORY value supplied. \"part\": either \"Part 1\" or \"Part 2\". \"cue\": m:ss where that part starts - Part 1 is always 0:00, Part 2 starts at 40 percent of total script duration. \"prompt\": a complete ready-to-use music generation prompt following AlfredAI sonic DNA. ' + SONIC_DNA + '],');\nP.push('  \"cutting_technique\": {\"hook_to_main\": {\"cue\": \"m:ss\", \"technique\": \"\"}, \"main_to_pain\": {\"cue\": \"m:ss\", \"technique\": \"\"}, \"pain_to_solution\": {\"cue\": \"m:ss\", \"technique\": \"\"}, \"solution_to_cta\": {\"cue\": \"m:ss\", \"technique\": \"\"}},');\nP.push('  \"soundbite\": \"' + SOUNDBITE + '\"');\nP.push('}');\nP.push('');\nP.push('Be specific, practical and editor-ready. Return ONLY the JSON object - no markdown, no explanation, no code fences.');\n\nlet userPrompt = P.join('\\n');\n\n// A full template in cfg.production_brief.user_prompt_template overrides the built-in prompt.\nif (pb.user_prompt_template) {\n  const vars = { topic: d.topic, category: d.category, script: d.script, content_type: d.content_type, platform: d.platform, brand: cfg.brand_name || cfg.client_name || '', wpm: String(WPM), sfx_vocabulary: SFX, sonic_dna: SONIC_DNA, soundbite: SOUNDBITE };\n  userPrompt = String(pb.user_prompt_template).replace(/\\{\\{\\s*([A-Za-z_]+)\\s*\\}\\}/g, (m, k) => {\n    const key = k.toLowerCase();\n    return Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : m;\n  });\n}\n\nconst body = {\n  model: pb.model || 'gpt-4.1-mini',\n  messages: [\n    { role: 'system', content: pb.system_prompt || 'You are a professional video editor and content strategist for AlfredAI. You produce precise, actionable production briefs for video editors. Every asset you list must carry a timestamp cue computed from the script at ' + WPM + ' words per minute, so the editor knows exactly where it belongs on the timeline. Always respond with valid JSON only - no markdown, no explanation, no code fences.' },\n    { role: 'user', content: userPrompt }\n  ],\n  temperature: (pb.temperature !== undefined && pb.temperature !== null) ? pb.temperature : 0.6,\n  max_tokens: pb.max_tokens || 3000\n};\nreturn { json: { ...d, brief_body: JSON.stringify(body) } };"
+      },
+      "id": "3315b7b5-9861-465a-83c2-161ad4837c66",
+      "name": "2b. Build Brief Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5744,
+        -4912
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const brief = $('4. Parse Production Brief').item.json;\nconst cfg = brief.cfg || {};\nconst pb = cfg.production_brief || {};\nconst fetched = $input.item.json || {};\nconst f = fetched.fields || fetched;\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = pb.notes_separator || '==============================';\nconst STAGE_TAG = pb.stage_tag || cfg.notes_stage_tag || 'PRODUCTION BRIEF (WF06c)';\nconst WPM = pb.wpm || 150;\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(STAGE_TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst notesBase = freshNotes.replace(blockRe, '').trim();\n\nlet triggered = '';\nlet runtime = 'unknown';\ntry {\n  const raw = $('1z. Attach Config').first().json.started_at || '';\n  triggered = raw ? raw.substring(0, 16).replace('T', ' ') : '';\n  const s = Date.parse(raw);\n  if (s) { const secs = Math.max(0, Math.round((Date.now() - s) / 1000)); runtime = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'; }\n} catch (e) {}\n\nconst countItems = (s) => { if (!s) return 0; const m = String(s).match(/^\\d+\\.\\s/gm); return m ? m.length : 0; };\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\n\nconst block = sep + '\\n' + STAGE_TAG\n  + '\\nTriggered: ' + triggered\n  + '\\nUpdated: ' + stamp\n  + '\\nRun time: ' + runtime\n  + '\\nStage: Complete'\n  + '\\nTiming basis: ' + WPM + ' wpm, cues computed from script'\n  + '\\nScreenshots: ' + countItems(brief.screenshots_needed)\n  + '\\nB-roll clips: ' + countItems(brief.broll_generated)\n  + '\\nB-roll references: ' + countItems(brief.broll_reference)\n  + '\\nSound effects: ' + countItems(brief.sound_effects)\n  + '\\nBGM parts: ' + countItems(brief.music_bgm);\n\nconst notesFinal = (notesBase ? notesBase + '\\n\\n' : '') + block;\nreturn { json: { ...brief, sep: sep, stage_tag: STAGE_TAG, notes_base: notesBase, reel_notes_final: notesFinal } };"
+      },
+      "id": "8bd3a5f0-669e-434d-96d2-c3055ed7a9d3",
+      "name": "6d. Build Reel Notes Block",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7312,
+        -4912
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "19e4006e-d22d-4478-b212-b105150b19e1",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        3952,
+        -4640
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblPz8Dz6X3sYrzsC"
+        },
+        "filterByFormula": "{Enabled}",
+        "options": {}
+      },
+      "id": "284d6342-8163-48c1-9e03-4fe9b0589efe",
+      "name": "0a2. Load Client Outputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4176,
+        -4640
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const OUTPUT_TYPE = 'production_brief';\n\nfunction parseJson(raw, label) {\n  if (!raw) return {};\n  try {\n    const v = JSON.parse(raw);\n    if (v && typeof v === 'object' && !Array.isArray(v)) return v;\n    return {};\n  } catch (e) { console.log('[0b] Invalid Config_JSON on ' + label + ': ' + e.message); return {}; }\n}\n\nconst outputs = $input.all().map(i => i.json);\nconst clients = $('0a. Load Clients').all().map(i => i.json);\nconst outByKey = {};\nfor (const o of outputs) {\n  const key = (o['Key'] || '').trim().toLowerCase();\n  if (key) outByKey[key] = o;\n}\n\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  const o = outByKey[(name + '::' + OUTPUT_TYPE).toLowerCase()] || null;\n  const merged = { ...parseJson(c['Config_JSON'], name), ...parseJson(o ? o['Config_JSON'] : '', name + '::' + OUTPUT_TYPE) };\n  out.push({ json: { ...merged, client_name: name, video_base_id: c['Video_Base_ID'], brand_name: c['Brand_Name'] || name, notes_stage_tag: c['Notes_Stage_Tag'] || '', output_type: OUTPUT_TYPE } });\n}\nconsole.log('[0b] Clients to process: ' + out.length);\nreturn out;"
+      },
+      "id": "2e75819d-c55d-425f-8f7f-5e1f2a0d3c04",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        -4640
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "a4085cbc-99e4-452c-8940-ce0e03ee3fcb",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4624,
+        -4640
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b8f44be0-1d8d-4591-8884-7c641f5a07e1",
+      "name": "0d. All Clients Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4848,
+        -4720
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg, started_at: new Date().toISOString() } };"
+      },
+      "id": "82b0352a-7a9e-4d27-bc50-a11e60b5bf9d",
+      "name": "1z. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5072,
+        -4912
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// T-44: continue only when Production_Approval is ticked AND Script_Approval = Approved.\n// If any record in this pass is not approved, only those are passed on (to be reverted);\n// approved records then run on the next tick, so the client loop is reached once per pass.\nconst items = $input.all();\nconst isOk = (j) => {\n  const sa = j.Script_Approval;\n  const v = (sa && typeof sa === 'object') ? sa.name : sa;\n  return j.Production_Approval === true && v === 'Approved';\n};\nconst refused = items.filter(i => !isOk(i.json));\nconst pick = refused.length ? refused : items;\nreturn pick.map(i => ({ json: { ...i.json, _approved: refused.length === 0 } }));"
+      },
+      "id": "6fb9fb68-bbdd-407a-a749-cb6442c4bf7b",
+      "name": "1g. Approval Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5296,
+        -5136
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "approved-check",
+              "leftValue": "={{ $json._approved }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "922a41bb-e75c-4d97-ac5b-7f929375603b",
+      "name": "1h. Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5520,
+        -5136
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "filterByFormula": "={{ 'RECORD_ID()=\"' + $json.id + '\"' }}",
+        "options": {}
+      },
+      "id": "26392b58-ef28-4b87-bf90-4e73e5318aaa",
+      "name": "1i. Re-read Notes (Not Approved)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        5744,
+        -5136
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const rec = $input.item.json || {};\nconst f = rec.fields || rec;\nconst cfg = $('1z. Attach Config').first().json.cfg || {};\nconst pb = cfg.production_brief || {};\nconst freshNotes = (f && typeof f.Reel_Notes === 'string') ? f.Reel_Notes : '';\n\nconst sep = pb.notes_separator || '==============================';\nconst STAGE_TAG = pb.stage_tag || cfg.notes_stage_tag || 'PRODUCTION BRIEF (WF06c)';\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst blockRe = new RegExp('\\\\n*' + esc(sep) + '\\\\n' + esc(STAGE_TAG) + '[\\\\s\\\\S]*?(?=(\\\\n' + esc(sep) + '\\\\n)|$)', 'g');\nconst notesBase = freshNotes.replace(blockRe, '').trim();\nconst stamp = new Date().toISOString().substring(0, 16).replace('T', ' ');\n\nconst block = sep + '\\n' + STAGE_TAG\n  + '\\nUpdated: ' + stamp\n  + '\\nStage: Skipped'\n  + '\\nNot approved: skipped';\n\nreturn { json: { record_id: rec.id || '', revert_status: 'Video Ready', reel_notes_final: (notesBase ? notesBase + '\\n\\n' : '') + block } };"
+      },
+      "id": "bb9e1c83-c4b3-430b-92af-4ee3f23735d4",
+      "name": "1j. Build Skip Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5968,
+        -5136
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1z. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblSBKG2Zx2nZUPIT"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Reel_Notes": "={{ $json.reel_notes_final }}",
+            "Status": "={{ $json.revert_status }}",
+            "id": "={{ $json.record_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "098fe858-738a-45a9-a212-bc15ec96391c",
+      "name": "1k. Revert Not Approved",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        6192,
+        -5136
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "5b. Find Screenshot Sources": {
+      "main": [
+        [
+          {
+            "node": "5c. Parse Screenshot Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Has Screenshots Needed?": {
+      "main": [
+        [
+          {
+            "node": "5b. Find Screenshot Sources",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "5d. No Screenshots — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Parse Production Brief": {
+      "main": [
+        [
+          {
+            "node": "5. Has Screenshots Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Generate Production Brief": {
+      "main": [
+        [
+          {
+            "node": "4. Parse Production Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Extract Record Data": {
+      "main": [
+        [
+          {
+            "node": "2b. Build Brief Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Build Brief Prompt": {
+      "main": [
+        [
+          {
+            "node": "3. Generate Production Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6d. Build Reel Notes Block": {
+      "main": [
+        [
+          {
+            "node": "7. Save Production Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0a2. Load Client Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a2. Load Client Outputs": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "0d. All Clients Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Records Needing Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Records Needing Brief": {
+      "main": [
+        [
+          {
+            "node": "1z. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1z. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "1b. Any to Process?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Any to Process?": {
+      "main": [
+        [
+          {
+            "node": "1g. Approval Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5c. Parse Screenshot Sources": {
+      "main": [
+        [
+          {
+            "node": "6b. Fetch Existing Reel Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5d. No Screenshots — Skip": {
+      "main": [
+        [
+          {
+            "node": "6b. Fetch Existing Reel Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6b. Fetch Existing Reel Notes": {
+      "main": [
+        [
+          {
+            "node": "6d. Build Reel Notes Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Save Production Brief": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1g. Approval Gate": {
+      "main": [
+        [
+          {
+            "node": "1h. Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1h. Approved?": {
+      "main": [
+        [
+          {
+            "node": "2. Extract Record Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1i. Re-read Notes (Not Approved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1i. Re-read Notes (Not Approved)": {
+      "main": [
+        [
+          {
+            "node": "1j. Build Skip Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1j. Build Skip Notes": {
+      "main": [
+        [
+          {
+            "node": "1k. Revert Not Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1k. Revert Not Approved": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "21bd54e5-7fb5-4644-afad-97d4239c4452",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "TECJjQyikOpwm8mF",
+  "tags": [
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    },
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    }
+  ]
+}

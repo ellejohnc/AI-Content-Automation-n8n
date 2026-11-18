@@ -1,0 +1,901 @@
+{
+  "name": "WF02d - Instagram Topic Miner (Incremental) (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2176,
+        -592
+      ],
+      "id": "d5e5c765-8218-483c-9648-458a999fb6d5"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * 1"
+            }
+          ]
+        }
+      },
+      "name": "Weekly Trigger - Mon 6am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2176,
+        -400
+      ],
+      "id": "06b7cab9-6aea-4aaa-be46-27485610032c"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "filterByFormula": "AND(NOT({Instagram_Handle} = ''), {Status} = 'Active', {Instagram_Backfilled} = TRUE())",
+        "options": {}
+      },
+      "name": "1. Get Active Instagram Sources",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -1952,
+        -544
+      ],
+      "id": "0ccd3045-a924-493d-99af-d3d30fe7d6bc",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst sources = $input.all();\nif (!sources || sources.length === 0) {\n  return [{ json: { _skip: true, reason: 'No active Instagram sources' } }];\n}\nconst sourceMap = {};\nconst directUrls = [];\nconst seenHandles = new Set();\nconst scanDates = [];\n\nfor (const s of sources) {\n  let handle = (s.json['Instagram_Handle'] || '').replace(/^@/, '').trim();\n  if (!handle) {\n    const url = (s.json['Instagram_Links'] || s.json['Links'] || '');\n    const match = url.match(/instagram\\.com\\/([^/?#]+)/);\n    if (match && !['p','reel','tv','explore','stories'].includes(match[1])) handle = match[1].trim();\n  }\n  if (!handle) continue;\n\n  const key = handle.toLowerCase();\n  if (seenHandles.has(key)) {\n    console.log('[2a] Duplicate handle skipped: @' + handle);\n    continue;\n  }\n  seenHandles.add(key);\n\n  const profileUrl = 'https://www.instagram.com/' + handle + '/';\n  directUrls.push(profileUrl);\n\n  const lastScanned = s.json['Instagram_Last_Scanned'] || '';\n  sourceMap[key] = {\n    source_id: s.json.id || '',\n    source_name: s.json['Source Name'] || '',\n    handle: '@' + handle,\n    last_scanned: lastScanned\n  };\n  if (lastScanned) scanDates.push(lastScanned);\n}\n\nif (!directUrls.length) {\n  return [{ json: { _skip: true, reason: 'No valid handles found' } }];\n}\n\n// Weekly incremental. Apify's onlyPostsNewerThan is unreliable, so we request a\n// modest window here AND enforce a hard cutoff in node 3 by published_at.\n// Floor for the Apify request: oldest last-scanned date, or 8-day default.\nconst GLOBAL_DEFAULT_DAYS = 8;\nlet onlyNewerThan;\nconst allScanned = scanDates.length === directUrls.length && scanDates.length > 0;\nif (allScanned) {\n  const oldest = scanDates.sort()[0];\n  onlyNewerThan = oldest;\n  console.log('[2a] All sources scanned. Apify floor: ' + oldest);\n} else {\n  onlyNewerThan = GLOBAL_DEFAULT_DAYS + ' days';\n  console.log('[2a] ' + (directUrls.length - scanDates.length) + ' unscanned source(s). Apify window: ' + onlyNewerThan);\n}\n\nconsole.log('[2a] ' + directUrls.length + ' unique profiles | onlyPostsNewerThan=' + onlyNewerThan);\nreturn [{ json: { directUrls, source_map: sourceMap, only_newer_than: onlyNewerThan } }];\n"
+      },
+      "name": "2a. Prepare Apify Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1728,
+        -544
+      ],
+      "id": "667f38f3-80b0-4353-a94b-5a8b94507552"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~instagram-scraper/runs?token=REDACTED_APIFY&maxItems=200",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "apifyApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"directUrls\": {{ JSON.stringify($json.directUrls) }},\n  \"resultsType\": \"posts\",\n  \"resultsLimit\": 10,\n  \"onlyPostsNewerThan\": \"{{ $json.only_newer_than }}\",\n  \"skipPinnedPosts\": true,\n  \"addParentData\": false\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "name": "2b. Run Apify Actor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1504,
+        -544
+      ],
+      "id": "46769acb-1cb3-4784-89ba-02fb58864a2c",
+      "credentials": {
+        "apifyApi": {
+          "id": "Eq5ACNBTBaqokiL7",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst apifyInput = $('2a. Prepare Apify Input').first().json;\nconst sourceMap = apifyInput.source_map || {};\n\nconst allPosts = $input.all()\n  .map(i => i.json)\n  .filter(v => v && typeof v === 'object' && !v.error);\n\nconsole.log('[3] Apify returned ' + allPosts.length + ' total posts');\n\nif (!allPosts.length) {\n  return [{ json: { _skip: true, video_id: '', source_id: '', source_name: '', url: '' } }];\n}\n\n// HARD RECENCY CUTOFF. Apify's onlyPostsNewerThan is unreliable and returns old\n// posts (e.g. 2024). We enforce recency here by published date. A post is kept only\n// if newer than that source's last-scanned date. If a source was never scanned,\n// fall back to GLOBAL_FALLBACK_DAYS so a brand-new source still can't pull deep history.\nconst GLOBAL_FALLBACK_DAYS = 8;\nconst now = Date.now();\nconst fallbackCutoffMs = now - GLOBAL_FALLBACK_DAYS * 24 * 60 * 60 * 1000;\n\nfunction sourceCutoffMs(username) {\n  const info = sourceMap[username] || {};\n  const ls = info.last_scanned || '';\n  if (ls) {\n    const t = Date.parse(ls);\n    if (!isNaN(t)) return t;\n  }\n  return fallbackCutoffMs;\n}\n\nfunction postTimeMs(post) {\n  // Apify returns timestamp as ISO string; takenAtTimestamp as unix seconds.\n  const ts = post.timestamp || '';\n  if (ts) {\n    const t = Date.parse(ts);\n    if (!isNaN(t)) return t;\n  }\n  const unix = parseInt(post.takenAtTimestamp || 0);\n  if (unix > 0) return unix * 1000;\n  return 0; // unknown date -> will be dropped by cutoff\n}\n\nconst results = [];\nlet droppedOld = 0;\n\nfor (const post of allPosts) {\n  const postType = (post.type || post.productType || post.__typename || '').toUpperCase();\n  if (postType === 'IMAGE' || postType === 'CAROUSEL_ALBUM' || postType === 'SIDECAR') continue;\n\n  const username = (post.ownerUsername || post.username || '').toLowerCase().trim();\n\n  // RECENCY GATE\n  const pTime = postTimeMs(post);\n  const cutoff = sourceCutoffMs(username);\n  if (pTime <= cutoff) { droppedOld++; continue; }\n\n  const sourceInfo = sourceMap[username] || { source_id: '', source_name: username, handle: '@' + username };\n\n  const postId = String(post.id || post.shortCode || '');\n  if (!postId) continue;\n\n  const parseNum = (val) => {\n    if (val == null) return 0;\n    const s = String(val).replace(/,/g, '').trim();\n    if (s.endsWith('M')) return Math.round(parseFloat(s) * 1000000);\n    if (s.endsWith('K')) return Math.round(parseFloat(s) * 1000);\n    return parseInt(s) || 0;\n  };\n\n  const viewCount = parseNum(post.videoPlayCount || post.videoViewCount || post.playsCount || 0);\n  const likeCount = parseNum(post.likesCount || post.likes || 0);\n  const commentCount = parseNum(post.commentsCount || post.comments || 0);\n  const duration = parseInt(post.videoDuration || post.duration || 0);\n  const caption = post.caption || post.text || post.description || '';\n  const shortCode = post.shortCode || post.id || '';\n  const url = post.url || ('https://www.instagram.com/reel/' + shortCode + '/');\n  const publishedAt = post.timestamp || post.takenAtTimestamp || '';\n\n  let tags = '';\n  const hashtagMatches = caption.match(/#[\\w\\u0080-\\uFFFF]+/g);\n  if (hashtagMatches) tags = hashtagMatches.map(h => h.replace(/^#/, '')).join(', ');\n\n  results.push({\n    json: {\n      video_id: postId, source_id: sourceInfo.source_id, source_name: sourceInfo.source_name,\n      handle: sourceInfo.handle, title: caption.substring(0, 500), description: caption.substring(0, 500),\n      tags, url, view_count: viewCount, like_count: likeCount, comment_count: commentCount,\n      duration, published_at: publishedAt, channel_id: username, content_type: 'Reel', platform: 'Instagram'\n    }\n  });\n}\n\nconsole.log('[3] Dropped ' + droppedOld + ' posts older than cutoff. Kept ' + results.length + ' recent.');\n\nif (!results.length) {\n  return [{ json: { _skip: true, video_id: '', source_id: '', source_name: '', url: '' } }];\n}\n\n// Per-creator baseline median (last 30 videos) for outlier scoring. Framework Part 1.1.\n// DEFENSIVE: node 4 runs downstream; guard the reference.\nconst historyByChannel = {};\nlet _existingRecs = [];\ntry {\n  _existingRecs = $('4. Get All Existing Video IDs').all();\n} catch (e) {\n  console.log('[3] node 4 not executed this run, using current-run median');\n}\nfor (const rec of _existingRecs) {\n  const ch = (rec.json['Channel ID'] || '').toLowerCase().trim();\n  if (!ch) continue;\n  const v = parseInt(rec.json['View Count']) || 0;\n  const ts = rec.json['Published At'] || '';\n  if (!historyByChannel[ch]) historyByChannel[ch] = [];\n  historyByChannel[ch].push({ v, ts });\n}\n\nfunction median(arr) {\n  if (!arr.length) return 0;\n  const s = [...arr].sort((a, b) => a - b);\n  const mid = Math.floor(s.length / 2);\n  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];\n}\n\nconst currentByChannel = {};\nfor (const r of results) {\n  const ch = r.json.channel_id;\n  if (!currentByChannel[ch]) currentByChannel[ch] = [];\n  currentByChannel[ch].push({ v: r.json.view_count, ts: r.json.published_at });\n}\n\nconst baselineByChannel = {};\nconst allChannels = new Set([...Object.keys(historyByChannel), ...Object.keys(currentByChannel)]);\nfor (const ch of allChannels) {\n  const combined = [...(historyByChannel[ch] || []), ...(currentByChannel[ch] || [])]\n    .filter(x => x.v > 0)\n    .sort((a, b) => String(b.ts).localeCompare(String(a.ts)))\n    .slice(0, 30)\n    .map(x => x.v);\n  baselineByChannel[ch] = median(combined);\n}\n\nconst scored = [];\nfor (const r of results) {\n  const baseline = baselineByChannel[r.json.channel_id] || 0;\n  const outlierScore = baseline > 0 ? parseFloat((r.json.view_count / baseline).toFixed(2)) : 0;\n  scored.push({ json: { ...r.json, outlier_score: outlierScore, baseline_median: baseline } });\n}\n\nconsole.log('[3] Total extracted (recent): ' + scored.length);\nreturn scored;\n"
+      },
+      "name": "3. Extract & Flatten Instagram Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -384,
+        -544
+      ],
+      "id": "21aa3bb5-d5ce-46c6-b4f8-6506f0f1e187"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblWBISPAy99YtoPw",
+          "mode": "id"
+        },
+        "filterByFormula": "NOT({Video ID} = '')",
+        "options": {
+          "fields": [
+            "Video ID",
+            "Channel ID",
+            "View Count",
+            "Published At"
+          ]
+        }
+      },
+      "name": "4. Get All Existing Video IDs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -544
+      ],
+      "id": "cd284eb7-ca57-4836-91f4-3f34b8cb5ba8",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst existingItems = $input.all();\nconst existingIds = new Set(existingItems.map(i => i.json['Video ID'] || '').filter(id => id !== ''));\nconst incomingItems = $('3. Extract & Flatten Instagram Posts').all();\nconst seenThisRun = new Set();\nconst newVideos = incomingItems.filter(item => {\n  if (item.json._skip) return false;\n  const vid = item.json.video_id;\n  if (!vid || existingIds.has(vid) || seenThisRun.has(vid)) return false;\n  seenThisRun.add(vid);\n  return true;\n});\nconsole.log('[5] Apify: ' + incomingItems.length + ' | Existing: ' + existingIds.size + ' | New: ' + newVideos.length);\nif (newVideos.length === 0) return [{ json: { _skip: true, video_id: '', source_id: '', source_name: '', url: '' } }];\nreturn newVideos;\n"
+      },
+      "name": "5. Filter New Videos Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -544
+      ],
+      "id": "275502fe-11bd-40ef-8c79-182374def1e6"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Gate 1 per AlfredAI Outlier & Relevance Scoring Framework: OS >= 2.0x\n// Tiers: Mega-Viral (>5.0), Strong Outlier (2.0-5.0). Below 2.0 rejected.\nconst OUTLIER_THRESHOLD = 2.0;\nconst items = $input.all();\nconst outliers = [];\nconst skipped = [];\n\nfunction tierFor(score) {\n  if (score > 5.0) return 'Tier 1: Mega-Viral';\n  if (score >= 2.0) return 'Tier 2: Strong Outlier';\n  return null;\n}\n\nfor (const item of items) {\n  if (item.json._skip) continue;\n  const score = parseFloat(item.json.outlier_score) || 0;\n  const views = parseInt(item.json.view_count) || 0;\n  const title = (item.json.title || '').substring(0, 50);\n  const source = item.json.source_name || '';\n  const tier = tierFor(score);\n  if (tier) {\n    outliers.push({ json: { ...item.json, _skip: false, is_outlier: true, outlier_threshold: OUTLIER_THRESHOLD, outlier_tier: tier } });\n  } else {\n    skipped.push(source + ': \"' + title + '\" (score=' + score + ', views=' + views + ')');\n  }\n}\n\nif (skipped.length > 0) {\n  console.log('[5b] Skipped ' + skipped.length + ' below 2.0x:');\n  for (const s of skipped.slice(0, 10)) console.log('  - ' + s);\n  if (skipped.length > 10) console.log('  ... and ' + (skipped.length - 10) + ' more');\n}\nconsole.log('[5b] Outliers: ' + outliers.length + ' / ' + items.length + ' (Gate 1 threshold: ' + OUTLIER_THRESHOLD + 'x)');\nif (outliers.length === 0) return [{ json: { _skip: true, video_id: '', source_id: '', source_name: '', url: '' } }];\nreturn outliers;\n"
+      },
+      "name": "5b. Filter Outliers Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        -544
+      ],
+      "id": "f4594bcb-9bf1-4d23-9fb6-bfcfc3f05a4e"
+    },
+    {
+      "parameters": {
+        "batchSize": 3,
+        "options": {}
+      },
+      "name": "6. Batch of 3",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        512,
+        -544
+      ],
+      "id": "8c73a0b3-64c7-484a-a969-e90925a3007c"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.video_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "8c. Has Video Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        -688
+      ],
+      "id": "2fadcf27-b741-4c0c-b118-1e06b689dfa3"
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "name": "Wait 10s (Rate Limit)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        960,
+        -688
+      ],
+      "id": "ab4baa04-e1cc-46b3-bbcb-99c5004faa3e",
+      "webhookId": "wf02d-rate-limit-wait"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblWBISPAy99YtoPw",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Video ID": "={{ $json.video_id }}",
+            "Title": "={{ $json.title }}",
+            "URL": "={{ $json.url }}",
+            "Channel ID": "={{ $json.channel_id }}",
+            "Description": "={{ $json.description }}",
+            "Tags": "={{ $json.tags }}",
+            "Published At": "={{ $json.published_at }}",
+            "View Count": "={{ $json.view_count }}",
+            "Like Count": "={{ $json.like_count }}",
+            "Comment Count": "={{ $json.comment_count }}",
+            "Duration": "={{ $json.duration }}",
+            "Content Type": "={{ $json.content_type }}",
+            "Platform": "={{ $json.platform }}",
+            "Source Name": "={{ $json.source_name }}",
+            "Associated_Sources": "={{ $json.source_id ? [$json.source_id] : [] }}",
+            "Status": "New",
+            "Outlier Score": "={{ $json.outlier_score || 0 }}",
+            "Creator_Handle": "={{ $json.handle }}",
+            "Outlier Tier": "={{ $json.outlier_tier }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "9. Create Video Library Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        -688
+      ],
+      "id": "7e5f078f-5ae1-4dc6-a7c1-f5f3046453ac",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblWBISPAy99YtoPw",
+          "mode": "id"
+        },
+        "filterByFormula": "AND({Platform} = 'Instagram', NOT({Source Name} = ''))",
+        "options": {
+          "fields": [
+            "Source Name"
+          ]
+        }
+      },
+      "name": "9a. Get Video Library Counts",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -496
+      ],
+      "id": "07c4649f-ef11-4e5e-824f-c90519a0e42f",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst sources = $('1. Get Active Instagram Sources').all();\nconst allVLRecords = $('9a. Get Video Library Counts').all();\nconst actualCountByName = {};\nfor (const rec of allVLRecords) {\n  const sn = rec.json['Source Name'] || '';\n  if (sn) actualCountByName[sn] = (actualCountByName[sn] || 0) + 1;\n}\nconst results = [];\nfor (const source of sources) {\n  const sourceName = source.json['Source Name'] || '';\n  const sourceId = source.json.id;\n  const today = new Date().toISOString().split('T')[0];\n  results.push({ json: {\n    source_id: sourceId,\n    source_name: sourceName,\n    videos_found: actualCountByName[sourceName] || 0,\n    last_scanned: today\n  }});\n}\nconsole.log('[9b] Updating ' + results.length + ' sources');\nreturn results;\n"
+      },
+      "name": "9b. Aggregate by Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -496
+      ],
+      "id": "fb318a82-b13b-4358-a4bc-dc24f7cdea07"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Batch Sources",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1184,
+        -496
+      ],
+      "id": "4c599404-5bbb-4fe7-8dc9-7950fd04aa07"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "name": "Wait 2s Source",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        -640
+      ],
+      "id": "ef62eac0-e0e7-4bde-8a8e-e8fe7b5ba341",
+      "webhookId": "wf02d-src-wait"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.source_id }}",
+            "Videos Found": "={{ $json.videos_found }}",
+            "Instagram_Last_Scanned": "={{ $json.last_scanned }}",
+            "Last Checked": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "10b. Final Source Radar Update",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        -496
+      ],
+      "id": "25bcd723-3749-43a7-8a4c-d6abd9fc8b62",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "d6630508-4f92-4bd3-9291-117f04741ff7",
+      "name": "Sources Loop Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "id": "5b3a42c2-da5d-4529-9c52-4be314047ff8",
+      "name": "2c. Wait For Run",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        -544
+      ],
+      "webhookId": "a32fd04e-e65c-401c-9c1e-d0807c072276"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apify.com/v2/actor-runs/{{ $('2b. Run Apify Actor').first().json.data.id }}?token=REDACTED_APIFY",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "b06e4ec7-4302-45c9-8d7e-f4dd8d52c735",
+      "name": "2d. Check Run Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1056,
+        -592
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f1",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "SUCCEEDED"
+            },
+            {
+              "id": "f2",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "FAILED"
+            },
+            {
+              "id": "f3",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "ABORTED"
+            },
+            {
+              "id": "f4",
+              "leftValue": "={{ $json.data.status }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "TIMED-OUT"
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "cb2dae18-e305-4d45-8d14-f61243577cc8",
+      "name": "2e. Run Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -832,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apify.com/v2/datasets/{{ $('2d. Check Run Status').first().json.data.defaultDatasetId }}/items?format=json&clean=true&token=REDACTED_APIFY&limit=200",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "bb208134-3861-4b7e-8a05-3bac6415c8f8",
+      "name": "2f. Fetch Dataset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -608,
+        -544
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "1. Get Active Instagram Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Active Instagram Sources": {
+      "main": [
+        [
+          {
+            "node": "2a. Prepare Apify Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2a. Prepare Apify Input": {
+      "main": [
+        [
+          {
+            "node": "2b. Run Apify Actor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Extract & Flatten Instagram Posts": {
+      "main": [
+        [
+          {
+            "node": "4. Get All Existing Video IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Get All Existing Video IDs": {
+      "main": [
+        [
+          {
+            "node": "5. Filter New Videos Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Filter New Videos Only": {
+      "main": [
+        [
+          {
+            "node": "5b. Filter Outliers Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Filter Outliers Only": {
+      "main": [
+        [
+          {
+            "node": "6. Batch of 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Batch of 3": {
+      "main": [
+        [
+          {
+            "node": "9a. Get Video Library Counts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8c. Has Video Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8c. Has Video Data?": {
+      "main": [
+        [
+          {
+            "node": "Wait 10s (Rate Limit)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6. Batch of 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 10s (Rate Limit)": {
+      "main": [
+        [
+          {
+            "node": "9. Create Video Library Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Create Video Library Records": {
+      "main": [
+        [
+          {
+            "node": "6. Batch of 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9a. Get Video Library Counts": {
+      "main": [
+        [
+          {
+            "node": "9b. Aggregate by Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9b. Aggregate by Source": {
+      "main": [
+        [
+          {
+            "node": "Batch Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Sources": {
+      "main": [
+        [
+          {
+            "node": "Sources Loop Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 2s Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2s Source": {
+      "main": [
+        [
+          {
+            "node": "10b. Final Source Radar Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10b. Final Source Radar Update": {
+      "main": [
+        [
+          {
+            "node": "Batch Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Run Apify Actor": {
+      "main": [
+        [
+          {
+            "node": "2c. Wait For Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Wait For Run": {
+      "main": [
+        [
+          {
+            "node": "2d. Check Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2d. Check Run Status": {
+      "main": [
+        [
+          {
+            "node": "2e. Run Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2e. Run Finished?": {
+      "main": [
+        [
+          {
+            "node": "2f. Fetch Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2c. Wait For Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2f. Fetch Dataset": {
+      "main": [
+        [
+          {
+            "node": "3. Extract & Flatten Instagram Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Trigger - Mon 6am": {
+      "main": [
+        [
+          {
+            "node": "1. Get Active Instagram Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "07bf5a62-7d59-4927-aab5-d323a538c426",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "jWw85hiMnXgrKdcf",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

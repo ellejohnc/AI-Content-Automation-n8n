@@ -1,0 +1,784 @@
+{
+  "name": "WF02c-Backfill - TikTok Historical Backfill (Global)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -4496,
+        896
+      ],
+      "id": "5913bfc0-48dc-423c-8ef4-10531adfbcbb"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * 0"
+            }
+          ]
+        }
+      },
+      "name": "Weekly Trigger - Sunday 2am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -4496,
+        1088
+      ],
+      "id": "bd8c4284-dd0a-4cb3-919b-2ab2e5661b31"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "filterByFormula": "AND(NOT({TikTok_Links} = ''), {Status} = 'Active', NOT({TikTok_Backfilled} = TRUE()))",
+        "options": {}
+      },
+      "name": "1. Get Unbackfilled TikTok Sources",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -3600,
+        656
+      ],
+      "id": "1f65eb03-cb57-49fb-8e7e-00140afd9f04",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Nothing to Backfill",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -3600,
+        848
+      ],
+      "id": "32c722ff-22c6-43cf-b402-9e063b959748"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('1c. Attach Config').first().json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "filterByFormula": "AND(NOT({Video ID} = ''), {Platform} = 'TikTok')",
+        "options": {
+          "fields": [
+            "Video ID",
+            "Channel ID",
+            "View Count",
+            "Published At"
+          ]
+        }
+      },
+      "name": "2. Get All Existing Video IDs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -3152,
+        656
+      ],
+      "id": "f7d49e4d-acf5-4297-a7c7-91d5424f6f8d",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const srcItems = $('1c. Attach Config').all().map(i => i.json);\nconst cfg = (srcItems[0] || {}).cfg || {};\nconst sources = srcItems.filter(s => s && s.id);\nconst out = [];\n\nfor (const s of sources) {\n  let raw = (s['TikTok_Handle'] || '').replace(/^@/, '').trim();\n  if (!raw) {\n    const url = (s['TikTok_Links'] || '');\n    const match = url.match(/tiktok\\.com\\/@([^/?]+)/);\n    if (match) raw = match[1].trim();\n  }\n  if (!raw) continue;\n  out.push({ json: { _skip: false, cfg, source_id: s.id || '', source_name: s['Source Name'] || '', handle: '@' + raw, channel_key: raw.toLowerCase(), profiles: ['https://www.tiktok.com/@' + raw] } });\n}\n\nif (!out.length) { return [{ json: { _skip: true, cfg, source_id: '', source_name: '' } }]; }\nconsole.log('[3a] Sources to backfill: ' + out.length);\nreturn out;"
+      },
+      "name": "3a. Prepare Single Source Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2928,
+        656
+      ],
+      "id": "dd7e9e4c-55de-4599-adf6-b313c2d809ab"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "3b. Has Valid Handle?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2704,
+        656
+      ],
+      "id": "34d49fd2-507d-430d-8713-bfe5c6db223a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/clockworks~tiktok-scraper/run-sync-get-dataset-items?format=json&clean=true&token=REDACTED_APIFY",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "identity"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"profiles\": {{ JSON.stringify($json.profiles) }},\n  \"resultsPerPage\": 100,\n  \"profileSorting\": \"latest\",\n  \"oldestPostDateUnified\": \"{{ new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0] }}\",\n  \"shouldDownloadVideos\": false,\n  \"shouldDownloadCovers\": false,\n  \"shouldDownloadSubtitles\": false,\n  \"shouldDownloadAvatars\": false\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 600000
+        }
+      },
+      "name": "4. Run Apify Backfill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2480,
+        656
+      ],
+      "id": "4903169e-0e28-45d8-87ee-0ed56d025e76"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = $('3a. Prepare Single Source Input').all().map(i => i.json).filter(s => !s._skip);\nconst cfg = (sources[0] || {}).cfg || {};\nconst sourceMap = {};\nfor (const s of sources) { if (s.channel_key) sourceMap[s.channel_key] = s; }\n\nconst currentYear = new Date().getFullYear();\nconst currentYearStart = currentYear + '-01-01';\n\nconst allVideos = $input.all().map(i => i.json).filter(v => v && typeof v === 'object' && !v.error && (v.id || v.video_id));\nif (!allVideos.length) { return [{ json: { _skip: true, cfg } }]; }\n\nconst parseNum = (val) => {\n  if (val == null) return 0;\n  const s = String(val).replace(/,/g, '').trim();\n  if (s.endsWith('M')) return Math.round(parseFloat(s) * 1000000);\n  if (s.endsWith('K')) return Math.round(parseFloat(s) * 1000);\n  return parseInt(s) || 0;\n};\n\nconst extracted = [];\nfor (const video of allVideos) {\n  const publishedAt = video.createTimeISO || '';\n  if (publishedAt && publishedAt < currentYearStart) continue;\n  const authorHandle = (video['authorMeta.name'] || (video.authorMeta && video.authorMeta.name) || '').toLowerCase().trim();\n  const src = sourceMap[authorHandle] || {};\n  const videoId = String(video.id || video.video_id || '');\n  if (!videoId) continue;\n  const durationSec = parseInt(video['videoMeta.duration'] || (video.videoMeta && video.videoMeta.duration) || video.duration || 0);\n  const title = video.text || video.desc || video.description || '';\n  let tags = '';\n  if (Array.isArray(video.hashtags)) {\n    tags = video.hashtags.map(h => typeof h === 'string' ? h.replace(/^#/, '') : (h.name || h.title || '')).join(', ');\n  } else if (video.text) {\n    const found = video.text.match(/#[\\w\\u0080-\\uFFFF]+/g);\n    if (found) tags = found.map(h => h.replace(/^#/, '')).join(', ');\n  }\n  const url = video.webVideoUrl || 'https://www.tiktok.com/@' + authorHandle + '/video/' + videoId;\n  extracted.push({ cfg, video_id: videoId, source_id: src.source_id || '', source_name: src.source_name || authorHandle, handle: src.handle || ('@' + authorHandle), title, description: title, tags, url, view_count: parseNum(video.playCount), like_count: parseNum(video.diggCount), comment_count: parseNum(video.commentCount), share_count: parseNum(video.shareCount || 0), duration: durationSec, published_at: publishedAt, channel_id: authorHandle, content_type: 'TikTok', platform: 'TikTok' });\n}\n\nif (!extracted.length) { return [{ json: { _skip: true, cfg } }]; }\n\nfunction median(arr) {\n  if (!arr.length) return 0;\n  const s = [...arr].sort((a, b) => a - b);\n  const mid = Math.floor(s.length / 2);\n  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];\n}\n\nconst historyByChannel = {};\nlet existingRecs = [];\ntry { existingRecs = $('2. Get All Existing Video IDs').all(); } catch (e) {}\nfor (const rec of existingRecs) {\n  const ch = (rec.json['Channel ID'] || '').toLowerCase().trim();\n  if (!ch) continue;\n  if (!historyByChannel[ch]) historyByChannel[ch] = [];\n  historyByChannel[ch].push({ v: parseInt(rec.json['View Count']) || 0, ts: rec.json['Published At'] || '' });\n}\n\nconst currentByChannel = {};\nfor (const v of extracted) {\n  if (!currentByChannel[v.channel_id]) currentByChannel[v.channel_id] = [];\n  currentByChannel[v.channel_id].push({ v: v.view_count, ts: v.published_at });\n}\n\nconst baselineByChannel = {};\nconst allChannels = new Set([...Object.keys(historyByChannel), ...Object.keys(currentByChannel)]);\nfor (const ch of allChannels) {\n  const combined = [...(historyByChannel[ch] || []), ...(currentByChannel[ch] || [])]\n    .filter(x => x.v > 0)\n    .sort((a, b) => String(b.ts).localeCompare(String(a.ts)))\n    .slice(0, 30)\n    .map(x => x.v);\n  baselineByChannel[ch] = median(combined);\n}\n\nconsole.log('[5] Scored ' + extracted.length + ' videos against 30-video baseline');\nreturn extracted.map(v => {\n  const baseline = baselineByChannel[v.channel_id] || 0;\n  const outlierScore = baseline > 0 ? parseFloat((v.view_count / baseline).toFixed(2)) : 0;\n  return { json: { ...v, outlier_score: outlierScore, baseline_median: baseline } };\n});"
+      },
+      "name": "5. Extract & Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2256,
+        656
+      ],
+      "id": "a2ff3081-5c3a-4a87-8e92-65ce88dbb938"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gate 1: OS >= threshold. Tiers: Mega-Viral (>5.0), Strong Outlier (>=2.0).\nconst OUTLIER_THRESHOLD = 2.0;\nconst incoming = $input.all();\nconst cfg = (incoming[0] && incoming[0].json && incoming[0].json.cfg) || {};\n\nfunction tierFor(score) {\n  if (score > 5.0) return 'Tier 1: Mega-Viral';\n  if (score >= OUTLIER_THRESHOLD) return 'Tier 2: Strong Outlier';\n  return null;\n}\n\nlet existingRecs = [];\ntry { existingRecs = $('2. Get All Existing Video IDs').all(); } catch (e) {}\nconst existingIds = new Set(existingRecs.map(i => i.json['Video ID'] || '').filter(id => id !== ''));\n\nconst seenThisRun = new Set();\nconst outliers = [];\nlet skippedDupe = 0;\nlet skippedThreshold = 0;\n\nfor (const item of incoming) {\n  if (item.json._skip) continue;\n  const vid = item.json.video_id;\n  if (!vid || existingIds.has(vid) || seenThisRun.has(vid)) { skippedDupe++; continue; }\n  seenThisRun.add(vid);\n  const score = parseFloat(item.json.outlier_score) || 0;\n  const tier = tierFor(score);\n  if (tier) { outliers.push({ json: { ...item.json, is_outlier: true, outlier_threshold: OUTLIER_THRESHOLD, outlier_tier: tier } }); }\n  else { skippedThreshold++; }\n}\n\nconsole.log('[6] Dupes: ' + skippedDupe + ' | Below threshold: ' + skippedThreshold + ' | Outliers: ' + outliers.length);\nif (!outliers.length) { return [{ json: { _skip: true, cfg } }]; }\nreturn outliers;"
+      },
+      "name": "6. Filter New Outliers Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2032,
+        656
+      ],
+      "id": "88f164e8-4abc-41f0-9225-7f0618729fe7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "7. Has Outliers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1808,
+        656
+      ],
+      "id": "9ffbec02-8456-4676-a4de-42dce9d56132"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = $('3a. Prepare Single Source Input').all().map(i => i.json).filter(s => !s._skip && s.source_id);\nif (!sources.length) { return []; }\nconst today = new Date().toISOString().split('T')[0];\nreturn sources.map(s => ({ json: { cfg: s.cfg, source_id: s.source_id, source_name: s.source_name, last_scanned: today } }));"
+      },
+      "name": "10. Build Mark Backfilled Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        656
+      ],
+      "id": "a7891ab0-6c56-4ba8-9284-c3ba6aa487e2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbloAZ3EVCtVtCJrj"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Last Checked": "={{ $now.toISO() }}",
+            "TikTok_Backfilled": true,
+            "TikTok_Last_Scanned": "={{ $json.last_scanned }}",
+            "id": "={{ $json.source_id }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "11. Mark Source Backfilled",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        816
+      ],
+      "id": "b68f60df-8962-41aa-b6c3-be223c967f20",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-source-id",
+              "leftValue": "={{ $json.source_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "10b. Has Source ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1136,
+        656
+      ],
+      "id": "7f5df2da-7256-4e43-a036-19e892badbe9"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apphKduGCjFy3K0c3"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbl0wtV6uKqcawqH8"
+        },
+        "filterByFormula": "AND({Status}='Active', {Video_Enabled})",
+        "options": {}
+      },
+      "id": "be2e35bb-9931-4dfa-8f9f-e55a11e3b5c6",
+      "name": "0a. Load Clients",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4272,
+        992
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const clients = $input.all().map(i => i.json);\nconst out = [];\nfor (const c of clients) {\n  const name = c['Client_Name'];\n  if (!name) continue;\n  if (c['Video_Enabled'] !== true) continue;\n  if (!c['Video_Base_ID']) continue;\n  out.push({ json: { client_name: name, video_base_id: c['Video_Base_ID'] } });\n}\nreturn out;"
+      },
+      "id": "76835171-1c9e-4367-a789-16a602388d36",
+      "name": "0b. Build Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4048,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "78670e8c-3bba-47da-ace1-f2fa7e0f8478",
+      "name": "0c. Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -3824,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const loop = $('0c. Client Loop');\nlet cfg = null;\ntry { cfg = loop.item.json; } catch (e) { cfg = null; }\nif (!cfg || !cfg.video_base_id) { throw new Error('Could not resolve client config for this iteration.'); }\nreturn { json: { ...$input.item.json, cfg } };"
+      },
+      "id": "54b0ac21-f5a0-4e8a-bcec-241ae7a59859",
+      "name": "1c. Attach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3376,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.cfg.video_base_id }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblWBISPAy99YtoPw"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [],
+          "value": {
+            "Associated_Sources": "={{ $json.source_id ? [$json.source_id] : [] }}",
+            "Channel ID": "={{ $json.channel_id }}",
+            "Comment Count": "={{ $json.comment_count }}",
+            "Content Type": "={{ $json.content_type }}",
+            "Creator_Handle": "={{ $json.handle }}",
+            "Description": "={{ $json.description }}",
+            "Duration": "={{ $json.duration }}",
+            "Like Count": "={{ $json.like_count }}",
+            "Outlier Score": "={{ $json.outlier_score || 0 }}",
+            "Outlier Tier": "={{ $json.outlier_tier }}",
+            "Platform": "={{ $json.platform }}",
+            "Published At": "={{ $json.published_at }}",
+            "Source Name": "={{ $json.source_name }}",
+            "Status": "New",
+            "Tags": "={{ $json.tags }}",
+            "Title": "={{ $json.title }}",
+            "URL": "={{ $json.url }}",
+            "Video ID": "={{ $json.video_id }}",
+            "View Count": "={{ $json.view_count }}"
+          }
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "f3ea600c-eb6c-49da-ada4-fa2d1a1ec9af",
+      "name": "9. Create Video Library Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1584,
+        576
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Zogs9vNOWILOB0or",
+          "name": "Airtable Access Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "0fb54cb5-cb9f-4df3-8261-4a68d3dfca99",
+      "name": "0e. Loop Return",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -912,
+        800
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "3a. Prepare Single Source Input": {
+      "main": [
+        [
+          {
+            "node": "3b. Has Valid Handle?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b. Has Valid Handle?": {
+      "main": [
+        [
+          {
+            "node": "4. Run Apify Backfill",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Run Apify Backfill": {
+      "main": [
+        [
+          {
+            "node": "5. Extract & Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Extract & Score": {
+      "main": [
+        [
+          {
+            "node": "6. Filter New Outliers Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Filter New Outliers Only": {
+      "main": [
+        [
+          {
+            "node": "7. Has Outliers?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Has Outliers?": {
+      "main": [
+        [
+          {
+            "node": "9. Create Video Library Records",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "10. Build Mark Backfilled Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10b. Has Source ID?": {
+      "main": [
+        [
+          {
+            "node": "11. Mark Source Backfilled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Trigger - Sunday 2am": {
+      "main": [
+        [
+          {
+            "node": "0a. Load Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0a. Load Clients": {
+      "main": [
+        [
+          {
+            "node": "0b. Build Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0b. Build Config": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0c. Client Loop": {
+      "main": [
+        [
+          {
+            "node": "Nothing to Backfill",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1. Get Unbackfilled TikTok Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Unbackfilled TikTok Sources": {
+      "main": [
+        [
+          {
+            "node": "1c. Attach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1c. Attach Config": {
+      "main": [
+        [
+          {
+            "node": "2. Get All Existing Video IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Get All Existing Video IDs": {
+      "main": [
+        [
+          {
+            "node": "3a. Prepare Single Source Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Create Video Library Records": {
+      "main": [
+        [
+          {
+            "node": "10. Build Mark Backfilled Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. Build Mark Backfilled Payload": {
+      "main": [
+        [
+          {
+            "node": "10b. Has Source ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Mark Source Backfilled": {
+      "main": [
+        [
+          {
+            "node": "0e. Loop Return",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "0e. Loop Return": {
+      "main": [
+        [
+          {
+            "node": "0c. Client Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "73216471-2eb3-48e7-a54e-c8b14407b956",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "kha4dXAVZhisBJuY",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:04:42.700Z",
+      "createdAt": "2026-03-11T11:04:42.700Z",
+      "id": "d2B7HBGAJRpnBm1l",
+      "name": "Mainflow"
+    }
+  ]
+}

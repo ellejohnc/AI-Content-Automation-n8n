@@ -1,0 +1,659 @@
+{
+  "name": "WF01c - TikTok Handle Resolver (AlfredAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "55 5 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b0961b72-fc51-4cb3-84b8-94fbe7cd935f",
+      "name": "Daily Trigger - 5:55am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -608,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "filterByFormula": "AND(OR(FIND('tiktok.com', {TikTok_Links}), FIND('tiktok.com', {TikTok_Handle})), {TikTok_Handle} = '')",
+        "options": {}
+      },
+      "id": "ac4b5a50-d671-4d3f-90e1-be3c6168d4e5",
+      "name": "1. Get Sources to Resolve",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        -384,
+        -64
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n// FIX: hardcode API key — $credentials.X is not valid inside Code nodes\nconst SUPADATA_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6IjEifQ.eyJpc3MiOiJuYWRsZXMiLCJpYXQiOiIxNzQxNjk3Mzg2IiwicHVycG9zZSI6ImFwaV9hdXRoZW50aWNhdGlvbiIsInN1YiI6IjJmNDc1Yzg0OTBjNzQ0ZGNhMTJjODA3MzY3YzEzNTg1In0.th5iol8OEe8_Wkda7ENeG2WX_W7BnohBfGDb0_2v2SI';\nconst results = [];\n\nfor (const item of items) {\n  // FIX: read from TikTok_Links field (not generic Links)\n  const url      = item.json['TikTok_Links'] || item.json['Links'] || '';\n  const recordId = item.json.id;\n  let handle = '';\n\n  if (url.includes('tiktok.com/@')) {\n    handle = url.split('tiktok.com/@')[1].split('/')[0].split('?')[0].trim();\n  } else if (url.startsWith('@')) {\n    handle = url.replace('@', '').split('/')[0].trim();\n  } else if (url && !url.includes('/') && !url.includes('.')) {\n    handle = url.trim();\n  } else if (url.includes('tiktok.com/')) {\n    const part = url.split('tiktok.com/')[1].replace('@','').split('/')[0].split('?')[0].trim();\n    if (part) handle = part;\n  }\n\n  if (!handle) continue;\n\n  let displayName = handle;\n  try {\n    const profileResponse = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `https://api.supadata.ai/v1/tiktok/user?username=${encodeURIComponent(handle)}`,\n      headers: { 'x-api-key': SUPADATA_KEY },\n      json: true\n    });\n    displayName = profileResponse.nickname || profileResponse.display_name || profileResponse.author?.displayName || handle;\n  } catch(e) {\n    console.log('Supadata profile lookup failed for @' + handle + ': ' + e.message);\n    displayName = handle;\n  }\n\n  results.push({\n    json: { recordId, handle: '@' + handle.replace(/^@/, ''), displayName }\n  });\n}\n\nreturn results;\n"
+      },
+      "id": "07c5ae65-3b26-459f-b0cb-957adee4037f",
+      "name": "2. Resolve TikTok Handles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appgBzSHGSK2v8B6g",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbloAZ3EVCtVtCJrj",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "TikTok_Handle": "={{ $json.handle }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Source Name",
+              "displayName": "Source Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Active",
+                  "value": "Active"
+                },
+                {
+                  "name": "Inactive",
+                  "value": "Inactive"
+                },
+                {
+                  "name": "Pending Review",
+                  "value": "Pending Review"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Tech",
+                  "value": "Tech"
+                },
+                {
+                  "name": "Business",
+                  "value": "Business"
+                },
+                {
+                  "name": "News",
+                  "value": "News"
+                },
+                {
+                  "name": "Education",
+                  "value": "Education"
+                },
+                {
+                  "name": "Entertainment",
+                  "value": "Entertainment"
+                },
+                {
+                  "name": "Health",
+                  "value": "Health"
+                },
+                {
+                  "name": "Lifestyle",
+                  "value": "Lifestyle"
+                },
+                {
+                  "name": "Other",
+                  "value": "Other"
+                },
+                {
+                  "name": "Viral Pattern Source",
+                  "value": "Viral Pattern Source"
+                },
+                {
+                  "name": "Topic & News Source",
+                  "value": "Topic & News Source"
+                },
+                {
+                  "name": "AI Automation",
+                  "value": "AI Automation"
+                },
+                {
+                  "name": "AI Tools & Tutorials",
+                  "value": "AI Tools & Tutorials"
+                },
+                {
+                  "name": "Vibe Coding",
+                  "value": "Vibe Coding"
+                },
+                {
+                  "name": "Branding / CEO",
+                  "value": "Branding / CEO"
+                },
+                {
+                  "name": "SaaS / Indie Hacking",
+                  "value": "SaaS / Indie Hacking"
+                },
+                {
+                  "name": "AI / ML & Research",
+                  "value": "AI / ML & Research"
+                },
+                {
+                  "name": "AI Marketing",
+                  "value": "AI Marketing"
+                },
+                {
+                  "name": "Design & CEO",
+                  "value": "Design & CEO"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Source Type",
+              "displayName": "Source Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "YouTube",
+                  "value": "YouTube"
+                },
+                {
+                  "name": "TikTok",
+                  "value": "TikTok"
+                },
+                {
+                  "name": "Instagram",
+                  "value": "Instagram"
+                },
+                {
+                  "name": "Website",
+                  "value": "Website"
+                },
+                {
+                  "name": "Podcast",
+                  "value": "Podcast"
+                },
+                {
+                  "name": "Newsletter",
+                  "value": "Newsletter"
+                },
+                {
+                  "name": "Social Media",
+                  "value": "Social Media"
+                },
+                {
+                  "name": "Other",
+                  "value": "Other"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Website URL",
+              "displayName": "Website URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Instagram_Handle",
+              "displayName": "Instagram_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "TikTok_Handle",
+              "displayName": "TikTok_Handle",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "YouTube Channel ID",
+              "displayName": "YouTube Channel ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "YouTube_Links",
+              "displayName": "YouTube_Links",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Instagram_Links",
+              "displayName": "Instagram_Links",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "TikTok_Links",
+              "displayName": "TikTok_Links",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Video_Links",
+              "displayName": "Video_Links",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "YouTube Channel Name",
+              "displayName": "YouTube Channel Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Primary Focus",
+              "displayName": "Primary Focus",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Video Library",
+              "displayName": "Video Library",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Outlier Videos",
+              "displayName": "Outlier Videos",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Video_Links_Processed",
+              "displayName": "Video_Links_Processed",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Viral Library",
+              "displayName": "Viral Library",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Reel Engine",
+              "displayName": "Reel Engine",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "YouTube Handler (Formula)",
+              "displayName": "YouTube Handler (Formula)",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "YouTube Channel ID (Formula)",
+              "displayName": "YouTube Channel ID (Formula)",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Last Checked",
+              "displayName": "Last Checked",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Videos Found",
+              "displayName": "Videos Found",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Last Scanned",
+              "displayName": "Last Scanned",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "etag",
+              "displayName": "etag",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e689acdf-015d-4f25-8d35-1e55f563e620",
+      "name": "3. Update All Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -64
+      ],
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "3nxfujQCXcfQc8IW",
+          "name": "Airtable OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "dea6c0ea-ce8c-4117-aca4-dc838798ba26",
+      "name": "Batch of 1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        64,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "6b95a837-dcc5-4b9f-b2db-a76c004cabb7",
+      "name": "Wait 2s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        288,
+        -128
+      ],
+      "webhookId": "1ff2eeab-9c76-4797-b726-385ac125de52"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Trigger - 5:55am": {
+      "main": [
+        [
+          {
+            "node": "1. Get Sources to Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Get Sources to Resolve": {
+      "main": [
+        [
+          {
+            "node": "2. Resolve TikTok Handles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Resolve TikTok Handles": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Update All Records": {
+      "main": [
+        [
+          {
+            "node": "Batch of 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch of 1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait 2s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2s": {
+      "main": [
+        [
+          {
+            "node": "3. Update All Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "a826f769-1fdf-4be0-92d6-a7b8b4aabad0",
+  "meta": {
+    "instanceId": "d7dd3d96bb93f89464b87eb72d6d186ca382e1b1fef5e5814b2aa978b5cf63de"
+  },
+  "nodeGroups": [],
+  "id": "g67HzpPBrAC8i6rx",
+  "tags": [
+    {
+      "updatedAt": "2026-03-02T00:10:25.779Z",
+      "createdAt": "2026-03-02T00:10:25.779Z",
+      "id": "G11EyLFIKOsF4lFY",
+      "name": "Automation"
+    },
+    {
+      "updatedAt": "2026-03-11T11:03:28.507Z",
+      "createdAt": "2026-03-11T11:03:28.507Z",
+      "id": "5RNURxIHMsNTnGL9",
+      "name": "Subflow"
+    }
+  ]
+}
